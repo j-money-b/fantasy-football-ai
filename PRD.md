@@ -4,7 +4,7 @@
 **Date:** August 8, 2026 (Phase 1 completed August 9, 2026; Phase 2 completed August 9, 2026)
 **Season:** 2026 NFL
 **Platform:** Sleeper
-**Status:** Phase 2 complete (weekly brief, start/sit, GitHub Actions scheduling, `refresh` escape hatch). Phase 3 (waivers + FAAB, trade evaluation, bench-points-lost tracking) not yet started.
+**Status:** Phase 2 code complete and pushed (weekly brief, start/sit, GitHub Actions scheduling, `refresh` escape hatch) — see §8 for two still-open verification items (real cron firing, live rostered-team test) before calling it fully done. Phase 3 (waivers + FAAB, trade evaluation, bench-points-lost tracking) not yet started.
 
 ---
 
@@ -231,7 +231,7 @@ Sequenced against a hard draft deadline of 2–4 weeks out.
 ### Phase 0 — Done
 - Repo skeleton, Sleeper client, SQLite cache
 - Confirm league read works end-to-end
-- **Dev fixture:** user creates a throwaway Sleeper league (free, instant, ~12 team / half-PPR, no other members needed) to provide a real league object with real settings and a real draft ID. Deleted once the actual league exists.
+- **Dev fixture:** user creates a real Sleeper league (free, instant, ~12 team / half-PPR, no other members needed) to provide a real league object with real settings and a real draft ID. This is a genuine league with full commissioner functionality (not a synthetic/limited mock) — it's just single-manager and not the actual 2026 league with the other 11 managers. Whether it's kept or deleted once the real league exists is still an open call, not yet decided.
 
 ### Phase 1 — Done (2026-08-09)
 - Scoring engine (`ffai/scoring.py`) — validated to an exact match against real 2025 Sleeper actual-stats data across standard/half/PPR
@@ -251,7 +251,10 @@ Sequenced against a hard draft deadline of 2–4 weeks out.
 - GitHub Actions scheduling (`.github/workflows/weekly_brief.yml`) — Tuesday + Sunday mornings, `workflow_dispatch` for manual runs, commits `brief.md` back to the (private) repo with the default `GITHUB_TOKEN`, no new secrets needed
 - ESPN projections fallback fixed to refuse weekly fetches rather than silently return season totals (see §4.2)
 - 147 tests passing (`python -m pytest -q`)
-- **Known limitation, not yet fixed:** the sandbox league's rosters are still empty (the Phase 1 mock draft wasn't tied to league rosters — see §6.1). `startsit`/`brief` have been smoke-tested live against the sandbox league's empty-roster/no-matchup-data state (confirms R2 degrades cleanly) but not yet against a real rostered team or real matchup data. Next step: roster a few players on the sandbox team via the Sleeper app, then re-verify end-to-end.
+- Code pushed to GitHub (commit `2ebd397`); the workflow was manually triggered once via `gh workflow run` (`workflow_dispatch`) and confirmed working end-to-end — checkout, install, generate, and commit-back all succeeded, producing a real `brief.md` commit.
+- **Two things still open, not yet verified:**
+  1. **The actual cron schedule firing on its own is unconfirmed.** What was tested above is the manual `workflow_dispatch` trigger, which only proves the workflow's mechanics — it does not exercise the `schedule:` cron trigger itself. That can only be observed by waiting for the next real Tuesday or Sunday ~13:00 UTC and checking it fired (`gh run list --workflow=weekly_brief.yml`). Risk is low (GitHub's cron scheduling is a mature, reliable feature) but genuinely unobserved.
+  2. **No live verification against a real rostered team.** The sandbox league's rosters are still empty (the Phase 1 mock draft wasn't tied to league rosters — see §6.1). `startsit`/`brief` have been smoke-tested live against the sandbox league's empty-roster/no-matchup-data state (confirms R2 degrades cleanly) but not against real projections or a real optimal-lineup computation. In progress as of this writing: figuring out whether the Sleeper app's commissioner "Edit Roster" tool can add players to this league without running its pending draft first (the league's own draft is real, not a mock, and still shows `status: pre_draft`) — this doesn't require a full draft, just a few players manually added to test with.
 
 ### Phase 3 — In season
 - Waivers + FAAB (needs a few weeks of real data to be useful anyway)

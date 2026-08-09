@@ -6,7 +6,7 @@ An AI fantasy football manager built on the Sleeper API. It advises — it does 
 
 ## League context
 
-- **Sandbox league ID:** `1391979274122035200` — a throwaway dev-fixture league (Phase 0), used until the real 2026 league exists. Do not treat data from it as real league data.
+- **Sandbox league ID:** `1391979274122035200` — a real Sleeper league (created by the user, single-manager, full commissioner tools available), being used as a development sandbox until the real 2026 league exists. It is NOT a synthetic/limited mock object — treat it as a genuine league with normal Sleeper functionality (commissioner roster edits, waivers, etc. all work as they would in any real league). It just isn't the actual 2026 league with the other 11 managers.
 - **Sleeper username:** `kevinkissedpeter`
 - The real 2026 league ID is not yet known (Sleeper mints a new ID each season). Do not reuse a prior season's league ID.
 
