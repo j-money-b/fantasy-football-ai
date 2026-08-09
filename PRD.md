@@ -1,10 +1,10 @@
 # PRD — AI Fantasy Football Manager (Sleeper)
 
-**Version:** 0.1
-**Date:** August 8, 2026
+**Version:** 0.2
+**Date:** August 8, 2026 (Phase 1 completed August 9, 2026)
 **Season:** 2026 NFL
 **Platform:** Sleeper
-**Status:** Design approved, pre-build
+**Status:** Phase 1 complete (scoring engine, VORP, live draft assistant, built and validated against a real Sleeper mock draft). Phase 2 (weekly brief, start/sit, scheduling) not yet started.
 
 ---
 
@@ -121,6 +121,7 @@ Sleeper's documented API has no projections endpoint. This is the only genuinely
 
 - Primary: Sleeper projections feed (undocumented)
 - Fallback: ESPN endpoints
+- Supplementary cross-check (not a fallback): FantasyPros' free Projections pages (`fantasypros.com/nfl/projections/{pos}.php`) expose raw per-stat data unauthenticated, but only the **top 10 players per position** — the rest sits behind a registration fence (confirmed empirically; an earlier read of this page overstated what was open). Too thin to serve as a real fallback for the whole draft pool (would fail any reasonable coverage check), but exactly covers the early-round range where projection quality matters most and a second opinion is worth having. Used in the draft assistant's reasoning output for early picks only, not folded into the primary raw-stats pipeline.
 - Validation baseline: nflverse historical actuals
 
 **Proportionality note:** projections are the *least* decisive input in the system. Every source agrees the user should start their RB1. The edge comes from injury status, trending adds, depth chart movement, and opponent lineup holes — all of which are documented and free. Projections are a tiebreaker on close calls. Build the fallback; do not treat this as a crisis.
@@ -159,6 +160,8 @@ Consequences:
 - Bye-week and stacking awareness
 
 **Testing:** Sleeper mock drafts produce real draft IDs with real pick feeds, identical in shape to live drafts. This fully solves the "untestable until draft night" problem. Run repeatedly against mocks before the real draft.
+
+**Implementation note (learned running a real mock draft in Phase 1):** the picks feed's `roster_id` field came back `null` for every pick in a `league_mock`-type draft — mock drafts aren't tied to real league rosters, so there's no roster to assign. `draft_slot` (the 1-N seat position) is populated reliably in both mock and real drafts and is what the assistant uses to track "my picks." Confirmed endpoint shapes: `GET /v1/draft/{id}` and `GET /v1/draft/{id}/picks` behave identically for mock and real drafts, picks are ordered/append-only by `pick_no`.
 
 ### 6.2 Weekly Start/Sit
 
@@ -222,18 +225,21 @@ None of this makes the system bulletproof. The realistic promise: failures are l
 
 Sequenced against a hard draft deadline of 2–4 weeks out.
 
-### Phase 0 — Now
+### Phase 0 — Done
 - Repo skeleton, Sleeper client, SQLite cache
 - Confirm league read works end-to-end
 - **Dev fixture:** user creates a throwaway Sleeper league (free, instant, ~12 team / half-PPR, no other members needed) to provide a real league object with real settings and a real draft ID. Deleted once the actual league exists.
 
-### Phase 1 — Before the draft *(hard deadline)*
-- Scoring engine + validation against 2025 actuals
-- Value-over-replacement tiers
-- Live draft assistant
-- **Repeated testing against Sleeper mock drafts**
+### Phase 1 — Done (2026-08-09)
+- Scoring engine (`ffai/scoring.py`) — validated to an exact match against real 2025 Sleeper actual-stats data across standard/half/PPR
+- Value-over-replacement tiers (`ffai/vorp.py`) — FLEX-slot-aware replacement levels, gap-based tier clustering
+- Projections adapter (`ffai/projections.py`, R5) — Sleeper (primary) -> ESPN (fallback) with R4 validation, plus a FantasyPros top-10-per-position consensus cross-check used for draft reasoning only (not a fallback -- their free tier only exposes the top 10 per position)
+- Live draft assistant (`ffai/draft_assistant.py`, `ffai/cli.py draft`) — polls a live draft, tracks the user's picks via `draft_slot`, recommends by VORP with tier/roster-need/bye-collision/positional-run/stacking/consensus reasoning, degrades gracefully to roster-need-only ranking if projections are fully unavailable
+- **Validated end-to-end against a real Sleeper mock draft** (12-team PPR, full 15 rounds) run in the sandbox league — caught and fixed two real bugs in the process: `roster_id` is null in mock drafts (see 6.1 implementation note) and an overly broad "known player" set was failing the R4 coverage check on genuinely good data
+- 111 tests passing (`python -m pytest -q`)
+- Follow-up noted for next mock draft session: confirm the 5s poll interval (`DRAFT_POLL_INTERVAL_SECONDS`) feels responsive enough for live back-and-forth; plenty of rate-limit headroom to tighten it if not
 
-### Phase 2 — Week 1
+### Phase 2 — Week 1 *(next up)*
 - Weekly brief
 - Start/sit
 - GitHub Actions scheduling
@@ -254,7 +260,7 @@ Sequenced against a hard draft deadline of 2–4 weeks out.
 | 2 | Waiver system: FAAB or rolling priority | No | Read from league settings. Both supported. |
 | 3 | Scoring format & roster slots | No | Auto-discovered from league object. |
 | 4 | Opponent scouting from league's 2025 season | No | These managers played together last year. `previous_league_id` on the 2026 league links back to it — potentially yields draft tendencies, waiver aggression, FAAB behavior for eleven unfamiliar opponents. Genuinely valuable for a newcomer. Cannot confirm data quality until visible. **Scoping question, not a requirement.** |
-| 5 | Keeper/dynasty format? | Phase 1 design | Changes draft logic substantially. Read from league settings once available. |
+| 5 | Keeper/dynasty format? | No (deferred) | Phase 1's draft assistant shipped without keeper/dynasty-specific logic (redraft VORP/tiers only) since the real league's format is still unknown. Changes draft logic substantially if the real league turns out to be keeper/dynasty -- revisit once real league settings are known, before relying on it for the actual draft. |
 | 6 | Paid projections (e.g. FantasyPros API) ever worth it? | No | Pricing not verified — do not assume. Not needed for year one. |
 
 ### Known non-issues
