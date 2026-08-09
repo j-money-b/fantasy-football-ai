@@ -32,3 +32,16 @@ class Recommendation:
     reasons: list  # list[str]
     degraded: bool
     data_source: str
+
+
+@dataclass
+class LineupSlot:
+    slot: str  # roster slot label, e.g. "QB", "RB", "FLEX" -- one entry per starting slot, duplicates preserved
+    player: "PlayerProjection | None" = None
+
+
+@dataclass
+class LineupResult:
+    slots: list  # list[LineupSlot], in roster_positions order
+    bench: list  # list[PlayerProjection]
+    total_points: float = 0.0

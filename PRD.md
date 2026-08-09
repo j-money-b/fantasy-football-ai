@@ -1,10 +1,10 @@
 # PRD — AI Fantasy Football Manager (Sleeper)
 
 **Version:** 0.2
-**Date:** August 8, 2026 (Phase 1 completed August 9, 2026)
+**Date:** August 8, 2026 (Phase 1 completed August 9, 2026; Phase 2 completed August 9, 2026)
 **Season:** 2026 NFL
 **Platform:** Sleeper
-**Status:** Phase 1 complete (scoring engine, VORP, live draft assistant, built and validated against a real Sleeper mock draft). Phase 2 (weekly brief, start/sit, scheduling) not yet started.
+**Status:** Phase 2 complete (weekly brief, start/sit, GitHub Actions scheduling, `refresh` escape hatch). Phase 3 (waivers + FAAB, trade evaluation, bench-points-lost tracking) not yet started.
 
 ---
 
@@ -92,10 +92,12 @@ A `CLAUDE.md` at repo root describing the league, the user's roster, and how to 
 
 ### 3.4 Scheduling
 
-**GitHub Actions.** Public repo, scheduled workflow. Removes the user's laptop from the critical path entirely — the user does not keep it powered on.
+**GitHub Actions.** Private repo, scheduled workflow. Removes the user's laptop from the critical path entirely — the user does not keep it powered on.
 
+- **Private, not public** (revised from an earlier draft of this doc). Private repos get 2,000 free Actions minutes/month, comfortably enough for two runs a week — no reason to expose league/roster data and config just to run a scheduled job.
+- Runs Tuesday and Sunday mornings (~13:00 UTC ≈ 8–9am ET depending on DST — a single cron entry, not worth chasing the exact DST offset): Tuesday for post-waiver-processing planning context, Sunday for a final lineup-lock check.
 - Known caveat: scheduled Actions can be delayed under load (minutes to occasionally longer). Acceptable for a morning brief.
-- Workflow writes the brief back to the repo.
+- Workflow writes the brief back to the repo (`.github/workflows/weekly_brief.yml`, `brief.md`).
 - Rejected: local cron (fails silently when the machine is asleep — this is the exact failure pattern the user has been burned by before).
 - Deferred: VPS or scheduled cloud function (~$5/mo) if tighter timing near the waiver deadline is ever needed.
 
@@ -121,6 +123,7 @@ Sleeper's documented API has no projections endpoint. This is the only genuinely
 
 - Primary: Sleeper projections feed (undocumented)
 - Fallback: ESPN endpoints
+- **Fallback is season-only, not week-aware** (learned in Phase 2): ESPN's weekly-projection payload shape is undocumented and unverified, unlike its season aggregate (spot-checked in Milestone 0). Rather than guess at that shape and risk silently returning a player's season total mislabeled as their week's projection — a direct "confidently wrong" violation — the adapter refuses weekly ESPN fetches outright (`ffai/projections.py::_fetch_espn` raises immediately when `week` is set) and lets R2/R3 degrade honestly instead. Net effect: during the season, if Sleeper's projections feed is ever down or fails validation, weekly projections have no real fallback and the brief/start-sit correctly shows `NO PROJECTIONS AVAILABLE` rather than silently wrong numbers. Season-long fetches (draft prep) are unaffected.
 - Supplementary cross-check (not a fallback): FantasyPros' free Projections pages (`fantasypros.com/nfl/projections/{pos}.php`) expose raw per-stat data unauthenticated, but only the **top 10 players per position** — the rest sits behind a registration fence (confirmed empirically; an earlier read of this page overstated what was open). Too thin to serve as a real fallback for the whole draft pool (would fail any reasonable coverage check), but exactly covers the early-round range where projection quality matters most and a second opinion is worth having. Used in the draft assistant's reasoning output for early picks only, not folded into the primary raw-stats pipeline.
 - Validation baseline: nflverse historical actuals
 
@@ -239,11 +242,16 @@ Sequenced against a hard draft deadline of 2–4 weeks out.
 - 111 tests passing (`python -m pytest -q`)
 - Follow-up noted for next mock draft session: confirm the 5s poll interval (`DRAFT_POLL_INTERVAL_SECONDS`) feels responsive enough for live back-and-forth; plenty of rate-limit headroom to tighten it if not
 
-### Phase 2 — Week 1 *(next up)*
-- Weekly brief
-- Start/sit
-- GitHub Actions scheduling
-- `refresh` escape hatch
+### Phase 2 — Done (2026-08-09)
+- Optimal-lineup engine (`ffai/lineup.py`) — exact maximum-weight assignment (greedy-by-points + augmenting-path search over slots), not an approximation; needed because the eventual "points left on the bench" metric (Tier 2 headline) requires the optimal lineup computed exactly, no judgment involved. Reused as-is by both `startsit` and `brief`, and will be reused unmodified in Phase 3 for retrospective bench-points-lost tracking.
+- Weekly data composition root (`ffai/weekly_context.py`) — resolves my roster and this week's opponent via `ffai/roster.py`, gathers league/rosters/users/players/current-week-state/weekly-projections through `repository.py`'s last-known-good pattern, and aggregates every source's staleness into one list for R1.
+- Weekly brief (`ffai/brief.py`, `ffai/cli.py brief --out`) — R6 heartbeat line, R1 staleness banner (states actual data age per stale source, not a placeholder), recommended lineup with changes-vs-currently-set-lineup callouts, injury/depth-chart flags, opponent's currently-set starters for context, `NO PROJECTIONS AVAILABLE` labeling when degraded (R2)
+- Start/sit (`ffai/cli.py startsit`) — plain-text rendering of the same optimal-lineup engine
+- `refresh` escape hatch (`ffai/cli.py refresh`, R7) — forces a live re-pull of the player dictionary regardless of its normal once-daily cache window, prints the plain-text start/sit summary. Waivers don't exist until Phase 3, so this is the closest present equivalent to "save the bad Tuesday"; its output will extend to include a waiver summary once Phase 3 ships.
+- GitHub Actions scheduling (`.github/workflows/weekly_brief.yml`) — Tuesday + Sunday mornings, `workflow_dispatch` for manual runs, commits `brief.md` back to the (private) repo with the default `GITHUB_TOKEN`, no new secrets needed
+- ESPN projections fallback fixed to refuse weekly fetches rather than silently return season totals (see §4.2)
+- 147 tests passing (`python -m pytest -q`)
+- **Known limitation, not yet fixed:** the sandbox league's rosters are still empty (the Phase 1 mock draft wasn't tied to league rosters — see §6.1). `startsit`/`brief` have been smoke-tested live against the sandbox league's empty-roster/no-matchup-data state (confirms R2 degrades cleanly) but not yet against a real rostered team or real matchup data. Next step: roster a few players on the sandbox team via the Sleeper app, then re-verify end-to-end.
 
 ### Phase 3 — In season
 - Waivers + FAAB (needs a few weeks of real data to be useful anyway)

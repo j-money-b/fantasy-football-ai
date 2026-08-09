@@ -92,6 +92,86 @@ def fetch_projections(
     return stale_result, True, fetched_at
 
 
+def fetch_rosters(client: SleeperClient, cache: Cache, league_id: str):
+    """Same last-known-good shape as fetch_league. Returns (data, stale, fetched_at)."""
+    key = f"rosters:{league_id}"
+    try:
+        data = client.get_rosters(league_id)
+    except SleeperAPIError:
+        cached = cache.get(key)
+        if cached is None:
+            raise
+        payload, fetched_at = cached
+        return payload, True, fetched_at
+
+    fetched_at = cache.set(key, data)
+    return data, False, fetched_at
+
+
+def fetch_users(client: SleeperClient, cache: Cache, league_id: str):
+    """Same last-known-good shape as fetch_league. Returns (data, stale, fetched_at)."""
+    key = f"users:{league_id}"
+    try:
+        data = client.get_users(league_id)
+    except SleeperAPIError:
+        cached = cache.get(key)
+        if cached is None:
+            raise
+        payload, fetched_at = cached
+        return payload, True, fetched_at
+
+    fetched_at = cache.set(key, data)
+    return data, False, fetched_at
+
+
+def fetch_matchups(client: SleeperClient, cache: Cache, league_id: str, week: int):
+    """Same last-known-good shape as fetch_league. Returns (data, stale, fetched_at)."""
+    key = f"matchups:{league_id}:{week}"
+    try:
+        data = client.get_matchups(league_id, week)
+    except SleeperAPIError:
+        cached = cache.get(key)
+        if cached is None:
+            raise
+        payload, fetched_at = cached
+        return payload, True, fetched_at
+
+    fetched_at = cache.set(key, data)
+    return data, False, fetched_at
+
+
+def fetch_nfl_state(client: SleeperClient, cache: Cache):
+    """Same last-known-good shape as fetch_league. Returns (data, stale, fetched_at)."""
+    key = "state:nfl"
+    try:
+        data = client.get_nfl_state()
+    except SleeperAPIError:
+        cached = cache.get(key)
+        if cached is None:
+            raise
+        payload, fetched_at = cached
+        return payload, True, fetched_at
+
+    fetched_at = cache.set(key, data)
+    return data, False, fetched_at
+
+
+def fetch_user(client: SleeperClient, cache: Cache, username: str):
+    """Same last-known-good shape as fetch_league. Returns (data, stale, fetched_at)."""
+    key = f"user:{username}"
+    try:
+        data = client.get_user(username)
+    except SleeperAPIError:
+        cached = cache.get(key)
+        if cached is None:
+            raise
+        payload, fetched_at = cached
+        return payload, True, fetched_at
+
+    fetched_at = cache.set(key, data)
+    return data, False, fetched_at
+
+
 def fetch_draft_picks(client: SleeperClient, cache: Cache, draft_id: str):
     """Always attempts a live fetch -- unlike fetch_players, there's no
     "fresh enough" cache window here, since the picks feed changes constantly

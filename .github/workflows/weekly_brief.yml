@@ -1,0 +1,37 @@
+name: Weekly Brief
+
+on:
+  schedule:
+    # 13:00 UTC ~= 8-9am ET depending on DST -- close enough for a morning
+    # brief that a human reads later; not worth a second cron entry to chase
+    # the DST shift exactly. Sunday (before lineup lock) and Tuesday (after
+    # waiver processing) per PRD 3.4/6.3.
+    - cron: "0 13 * * 0,2"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate brief
+        run: python -m ffai.cli brief --out brief.md
+
+      - name: Commit brief
+        run: |
+          git config user.name "ffai-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add brief.md
+          git diff --cached --quiet && echo "No changes to commit" || git commit -m "Update weekly brief"
+          git push

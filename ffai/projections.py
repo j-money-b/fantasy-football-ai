@@ -117,7 +117,7 @@ class ProjectionsAdapter:
             warnings.append("Sleeper projections failed validation, falling back to ESPN")
 
         try:
-            raw = self._fetch_espn(players_raw, season, positions)
+            raw = self._fetch_espn(players_raw, season, week, positions)
         except ProjectionsFetchError as exc:
             warnings.append(f"ESPN projections fetch failed: {exc}")
         else:
@@ -166,7 +166,19 @@ class ProjectionsAdapter:
 
         return {row["player_id"]: row.get("stats", {}) for row in data if row.get("player_id")}
 
-    def _fetch_espn(self, players_raw, season, positions):
+    def _fetch_espn(self, players_raw, season, week, positions):
+        if week is not None:
+            # ESPN's weekly-projection payload shape is undocumented and
+            # unverified (same risk category as the K/DEF bucket stats this
+            # file already declines to guess at, above). Rather than parse
+            # an unconfirmed shape and risk silently returning a player's
+            # SEASON total mislabeled as their WEEK's projection -- exactly
+            # the "confidently wrong" anti-goal -- refuse outright and let
+            # the normal degrade / last-known-good machinery (R2/R3) take
+            # over honestly. Season-long fetches (week=None) are unaffected
+            # and remain verified (Milestone 0).
+            raise ProjectionsFetchError("ESPN weekly projections are not a verified data shape; refusing to guess")
+
         espn_id_to_sleeper_id = {
             str(p["espn_id"]): pid for pid, p in players_raw.items() if p.get("espn_id")
         }

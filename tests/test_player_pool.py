@@ -1,4 +1,4 @@
-from ffai.player_pool import is_draftable, to_projection_pool
+from ffai.player_pool import build_projection, is_draftable, to_projection_pool
 from ffai.projections import ProjectionsResult
 
 
@@ -71,6 +71,26 @@ def test_to_projection_pool_missing_bye_week_data_defaults_to_none():
     pool = to_projection_pool(players_raw, projections, scoring_settings={})
 
     assert pool[0].bye_week is None
+
+
+def test_build_projection_ignores_draftable_filter_unlike_pool():
+    # A rostered player who's inactive or teamless (e.g. IR, between teams)
+    # must still resolve for weekly_context.py -- unlike to_projection_pool,
+    # which filters those out of the draft board.
+    players_raw = {"1": _player(active=False, team=None)}
+    projections = ProjectionsResult(raw_stats_by_player={}, source="sleeper", degraded=False)
+
+    projection = build_projection("1", players_raw, projections, scoring_settings={})
+
+    assert projection is not None
+    assert projection.points == 0.0
+    assert projection.data_source == "none"
+
+
+def test_build_projection_returns_none_for_unknown_player_id():
+    projections = ProjectionsResult(raw_stats_by_player={}, source="sleeper", degraded=False)
+
+    assert build_projection("missing", {}, projections, scoring_settings={}) is None
 
 
 def test_to_projection_pool_filters_players_with_no_team():

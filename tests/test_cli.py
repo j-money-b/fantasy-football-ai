@@ -21,6 +21,50 @@ def test_draft_subcommand_accepts_league_id_override():
     assert args.league_id == "999"
 
 
+def test_startsit_subcommand_defaults():
+    parser = build_parser()
+
+    args = parser.parse_args(["startsit"])
+
+    assert args.command == "startsit"
+    assert args.league_id == LEAGUE_ID
+    assert args.week is None
+
+
+def test_startsit_subcommand_accepts_week_override():
+    parser = build_parser()
+
+    args = parser.parse_args(["startsit", "--week", "5"])
+
+    assert args.week == 5
+
+
+def test_brief_subcommand_defaults():
+    parser = build_parser()
+
+    args = parser.parse_args(["brief"])
+
+    assert args.command == "brief"
+    assert args.out is None
+
+
+def test_brief_subcommand_accepts_out_path():
+    parser = build_parser()
+
+    args = parser.parse_args(["brief", "--out", "brief.md"])
+
+    assert args.out == "brief.md"
+
+
+def test_refresh_subcommand_defaults():
+    parser = build_parser()
+
+    args = parser.parse_args(["refresh"])
+
+    assert args.command == "refresh"
+    assert args.league_id == LEAGUE_ID
+
+
 def test_no_command_raises_system_exit():
     parser = build_parser()
 

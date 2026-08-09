@@ -1,16 +1,20 @@
 import argparse
 import sys
 import time
+from pathlib import Path
 
+from ffai.brief import render_brief_markdown
 from ffai.byes import load_bye_weeks
 from ffai.cache import Cache
 from ffai.config import CACHE_DB_PATH, DRAFT_POLL_INTERVAL_SECONDS, LEAGUE_ID
 from ffai.draft_assistant import DraftAssistant, format_recommendation
+from ffai.lineup import format_lineup, optimize_lineup
 from ffai.player_pool import is_draftable, to_projection_pool
 from ffai.projections import ProjectionsAdapter
 from ffai.repository import fetch_league, fetch_players, fetch_projections
 from ffai.sleeper_client import SleeperClient
 from ffai.vorp import build_tiers, compute_replacement_levels, compute_vorp
+from ffai.weekly_context import gather_weekly_context
 
 
 def cmd_draft(args):
@@ -78,6 +82,71 @@ def cmd_draft(args):
     return 0
 
 
+def _format_startsit_text(context):
+    if context.my_roster is None:
+        return "No roster found for you in this league yet."
+
+    lines = []
+    if context.projections_degraded:
+        lines.append("NO PROJECTIONS AVAILABLE -- showing your currently-set Sleeper lineup only, not optimized.")
+        starter_ids = [pid for pid in context.my_roster.get("starters") or [] if pid != "0"]
+        by_id = {p.player_id: p for p in context.my_players}
+        if not starter_ids:
+            lines.append("  (no lineup set yet)")
+        for player_id in starter_ids:
+            p = by_id.get(player_id)
+            lines.append(f"  {p.name} ({p.position}, {p.team})" if p else f"  (unknown player {player_id})")
+    else:
+        result = optimize_lineup(context.my_players, context.roster_positions)
+        lines.append(format_lineup(result))
+
+    if context.warnings:
+        lines.append("")
+        lines.append("WARNINGS:")
+        for warning in context.warnings:
+            lines.append(f"  - {warning}")
+
+    return "\n".join(lines)
+
+
+def cmd_startsit(args):
+    client = SleeperClient()
+    cache = Cache(db_path=CACHE_DB_PATH)
+
+    context = gather_weekly_context(client, cache, args.league_id, week=args.week)
+    print(_format_startsit_text(context))
+    return 0
+
+
+def cmd_brief(args):
+    client = SleeperClient()
+    cache = Cache(db_path=CACHE_DB_PATH)
+
+    context = gather_weekly_context(client, cache, args.league_id, week=args.week)
+    markdown = render_brief_markdown(context)
+
+    if args.out:
+        Path(args.out).write_text(markdown, encoding="utf-8")
+        print(f"Brief written to {args.out}")
+    else:
+        print(markdown)
+    return 0
+
+
+def cmd_refresh(args):
+    """R7: the escape hatch. Forces a fresh pull bypassing the player
+    dictionary's normal once-daily cache policy, and prints a plain-text
+    start/sit summary -- the closest existing equivalent to "save the bad
+    Tuesday" until waivers ship in Phase 3, at which point this extends to
+    include a waiver summary too."""
+    client = SleeperClient()
+    cache = Cache(db_path=CACHE_DB_PATH)
+
+    context = gather_weekly_context(client, cache, args.league_id, week=args.week, player_dict_max_age_hours=0)
+    print(_format_startsit_text(context))
+    return 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="ffai")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -87,6 +156,22 @@ def build_parser():
     draft_parser.add_argument("draft_slot", help="Your draft_slot (draft position, 1-N) within this draft")
     draft_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
     draft_parser.set_defaults(func=cmd_draft)
+
+    startsit_parser = subparsers.add_parser("startsit", help="Lineup recommendation for the current week")
+    startsit_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
+    startsit_parser.add_argument("--week", type=int, default=None, help="Week override (default: auto-detected)")
+    startsit_parser.set_defaults(func=cmd_startsit)
+
+    brief_parser = subparsers.add_parser("brief", help="Generate the weekly markdown brief")
+    brief_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
+    brief_parser.add_argument("--week", type=int, default=None, help="Week override (default: auto-detected)")
+    brief_parser.add_argument("--out", default=None, help="Write the brief to this file instead of stdout")
+    brief_parser.set_defaults(func=cmd_brief)
+
+    refresh_parser = subparsers.add_parser("refresh", help="Escape hatch: force a fresh pull, print start/sit summary")
+    refresh_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
+    refresh_parser.add_argument("--week", type=int, default=None, help="Week override (default: auto-detected)")
+    refresh_parser.set_defaults(func=cmd_refresh)
 
     return parser
 

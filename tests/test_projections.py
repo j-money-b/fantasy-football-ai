@@ -30,7 +30,7 @@ class _StubAdapter(ProjectionsAdapter):
             raise ProjectionsFetchError("simulated sleeper failure")
         return self.sleeper_raw
 
-    def _fetch_espn(self, players_raw, season, positions):
+    def _fetch_espn(self, players_raw, season, week, positions):
         if self.espn_raises:
             raise ProjectionsFetchError("simulated espn failure")
         return self.espn_raw
@@ -77,6 +77,33 @@ def test_fetch_degraded_when_both_sources_fail():
     assert result.degraded is True
     assert result.raw_stats_by_player == {}
     assert result.warnings
+
+
+def test_fetch_espn_refuses_weekly_fetch_rather_than_guess():
+    adapter = ProjectionsAdapter()
+
+    try:
+        adapter._fetch_espn(players_raw={}, season="2026", week=5, positions=["RB"])
+        assert False, "expected ProjectionsFetchError for a weekly ESPN fetch"
+    except ProjectionsFetchError:
+        pass
+
+
+def test_fetch_degrades_for_a_week_when_sleeper_fails(monkeypatch):
+    # ESPN is season-only (see above) -- a weekly fetch with a failing
+    # Sleeper source has no real fallback and must degrade honestly rather
+    # than fall through to ESPN's season data. Uses the real (unstubbed)
+    # _fetch_espn so its week-refusal actually runs.
+    def _raise_sleeper_failure(season, week, positions):
+        raise ProjectionsFetchError("simulated sleeper failure")
+
+    adapter = ProjectionsAdapter()
+    monkeypatch.setattr(adapter, "_fetch_sleeper", _raise_sleeper_failure)
+
+    result = adapter.fetch(players_raw={}, season="2026", week=5)
+
+    assert result.source == "none"
+    assert result.degraded is True
 
 
 def test_validate_rejects_payload_below_min_size():
