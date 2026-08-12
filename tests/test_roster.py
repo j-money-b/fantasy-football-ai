@@ -1,4 +1,4 @@
-from ffai.roster import find_display_name, find_my_roster, find_opponent_roster
+from ffai.roster import find_display_name, find_my_roster, find_opponent_roster, find_roster_by_display_name
 
 
 def test_find_my_roster_matches_by_owner_id():
@@ -43,3 +43,14 @@ def test_find_display_name_matches_by_user_id():
 
 def test_find_display_name_falls_back_to_raw_id_when_user_not_found():
     assert find_display_name([], "u404") == "u404"
+
+
+def test_find_roster_by_display_name_matches_case_insensitively():
+    users = [{"user_id": "u1", "display_name": "Rival"}]
+    rosters = [{"roster_id": 2, "owner_id": "u1"}]
+
+    assert find_roster_by_display_name(rosters, users, "rival") == {"roster_id": 2, "owner_id": "u1"}
+
+
+def test_find_roster_by_display_name_returns_none_when_not_found():
+    assert find_roster_by_display_name([], [], "Nobody") is None

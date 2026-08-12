@@ -83,6 +83,31 @@ def test_waivers_subcommand_accepts_week_override():
     assert args.week == 5
 
 
+def test_trade_subcommand_parses_repeatable_send_and_receive():
+    parser = build_parser()
+
+    args = parser.parse_args([
+        "trade", "--send", "Player One", "--send", "Player Two",
+        "--receive", "Player Three", "--with", "Rival",
+    ])
+
+    assert args.command == "trade"
+    assert args.send == ["Player One", "Player Two"]
+    assert args.receive == ["Player Three"]
+    assert args.with_manager == "Rival"
+    assert args.league_id == LEAGUE_ID
+
+
+def test_trade_subcommand_requires_send_receive_and_with():
+    parser = build_parser()
+
+    try:
+        parser.parse_args(["trade", "--send", "Player One"])
+        assert False, "expected SystemExit for missing required --receive/--with"
+    except SystemExit:
+        pass
+
+
 def test_no_command_raises_system_exit():
     parser = build_parser()
 

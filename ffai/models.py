@@ -53,3 +53,28 @@ class WaiverTarget:
     marginal_value: float  # points this player would add to my optimal lineup right now, vs. today
     trending_count: "int | None"
     reasons: list  # list[str]
+
+
+@dataclass
+class TradeParty:
+    label: str
+    roster_player_ids: list  # every player_id currently on this team's roster
+    sends_ids: list  # player_ids this team would send away in the proposed trade
+
+
+@dataclass
+class TradeSideResult:
+    label: str
+    sends: list  # list[PlayerVorp]
+    receives: list  # list[PlayerVorp]
+    value_sent: float  # summed season VORP of players sent away
+    value_received: float  # summed season VORP of players received
+    net_vorp: float  # value_received - value_sent
+    lineup_delta: float  # change in this team's optimal season-aggregate lineup total, after vs. before
+    bye_week_warnings: list  # list[str]
+
+
+@dataclass
+class TradeEvaluation:
+    sides: list  # list[TradeSideResult], one per team
+    verdict: str

@@ -6,13 +6,24 @@ from pathlib import Path
 from ffai.brief import render_brief_markdown
 from ffai.byes import load_bye_weeks
 from ffai.cache import Cache
-from ffai.config import CACHE_DB_PATH, DRAFT_POLL_INTERVAL_SECONDS, LEAGUE_ID
+from ffai.config import CACHE_DB_PATH, DRAFT_POLL_INTERVAL_SECONDS, LEAGUE_ID, SLEEPER_USERNAME
 from ffai.draft_assistant import DraftAssistant, format_recommendation
 from ffai.lineup import format_lineup, optimize_lineup
+from ffai.models import TradeParty
 from ffai.player_pool import is_draftable, to_projection_pool
 from ffai.projections import ProjectionsAdapter
-from ffai.repository import fetch_league, fetch_players, fetch_projections, fetch_trending_adds
+from ffai.repository import (
+    fetch_league,
+    fetch_players,
+    fetch_projections,
+    fetch_rosters,
+    fetch_trending_adds,
+    fetch_user,
+    fetch_users,
+)
+from ffai.roster import find_display_name, find_my_roster, find_roster_by_display_name
 from ffai.sleeper_client import SleeperAPIError, SleeperClient
+from ffai.trade import evaluate_trade, format_trade_evaluation, resolve_player_ids
 from ffai.vorp import build_tiers, compute_replacement_levels, compute_vorp
 from ffai.waivers import (
     compute_free_agents,
@@ -89,6 +100,81 @@ def cmd_draft(args):
     except KeyboardInterrupt:
         print("Stopped.")
 
+    return 0
+
+
+def cmd_trade(args):
+    client = SleeperClient()
+    cache = Cache(db_path=CACHE_DB_PATH)
+    adapter = ProjectionsAdapter()
+
+    league, league_stale, _ = fetch_league(client, cache, args.league_id)
+    if league_stale:
+        print("WARNING: using cached league data (live fetch failed)")
+
+    players_raw, players_stale, _ = fetch_players(client, cache)
+    if players_stale:
+        print("WARNING: using cached player dictionary (live fetch failed)")
+
+    rosters, rosters_stale, _ = fetch_rosters(client, cache, args.league_id)
+    if rosters_stale:
+        print("WARNING: using cached rosters (live fetch failed)")
+
+    users, users_stale, _ = fetch_users(client, cache, args.league_id)
+    if users_stale:
+        print("WARNING: using cached league users (live fetch failed)")
+
+    user, user_stale, _ = fetch_user(client, cache, SLEEPER_USERNAME)
+    if user_stale:
+        print("WARNING: using cached user lookup (live fetch failed)")
+
+    my_roster = find_my_roster(rosters, user.get("user_id"))
+    if my_roster is None:
+        print("No roster found for you in this league yet -- can't evaluate a trade.")
+        return 1
+
+    other_roster = find_roster_by_display_name(rosters, users, args.with_manager)
+    if other_roster is None:
+        print(f"No manager found matching {args.with_manager!r}.")
+        return 1
+
+    try:
+        send_ids = resolve_player_ids(args.send, players_raw)
+        receive_ids = resolve_player_ids(args.receive, players_raw)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+
+    scoring_settings = league.get("scoring_settings", {})
+    roster_positions = league.get("roster_positions", [])
+    total_rosters = league.get("total_rosters")
+    season = league.get("season")
+
+    known_player_ids = {pid for pid, p in players_raw.items() if is_draftable(p)}
+    projections, proj_stale, _ = fetch_projections(
+        adapter, cache, players_raw, season, known_player_ids=known_player_ids
+    )
+    if proj_stale or projections.degraded:
+        print(f"WARNING: projections degraded/stale ({'; '.join(projections.warnings)})")
+
+    byes_by_team = load_bye_weeks()
+    pool = to_projection_pool(players_raw, projections, scoring_settings, byes_by_team=byes_by_team)
+    replacement_levels = compute_replacement_levels(pool, roster_positions, total_rosters)
+    board_by_id = {p.player_id: p for p in compute_vorp(pool, replacement_levels)}
+
+    party_a = TradeParty(
+        label=find_display_name(users, my_roster.get("owner_id")) or "You",
+        roster_player_ids=my_roster.get("players") or [],
+        sends_ids=send_ids,
+    )
+    party_b = TradeParty(
+        label=find_display_name(users, other_roster.get("owner_id")) or args.with_manager,
+        roster_player_ids=other_roster.get("players") or [],
+        sends_ids=receive_ids,
+    )
+
+    evaluation = evaluate_trade(party_a, party_b, board_by_id, roster_positions)
+    print(format_trade_evaluation(evaluation))
     return 0
 
 
@@ -249,6 +335,13 @@ def build_parser():
     waivers_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
     waivers_parser.add_argument("--week", type=int, default=None, help="Week override (default: auto-detected)")
     waivers_parser.set_defaults(func=cmd_waivers)
+
+    trade_parser = subparsers.add_parser("trade", help="Evaluate a proposed trade")
+    trade_parser.add_argument("--send", action="append", required=True, help="Player name you'd send away (repeatable)")
+    trade_parser.add_argument("--receive", action="append", required=True, help="Player name you'd receive (repeatable)")
+    trade_parser.add_argument("--with", dest="with_manager", required=True, help="The other manager's Sleeper display name")
+    trade_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
+    trade_parser.set_defaults(func=cmd_trade)
 
     return parser
 
