@@ -1,10 +1,10 @@
 # PRD — AI Fantasy Football Manager (Sleeper)
 
-**Version:** 0.2
-**Date:** August 8, 2026 (Phase 1 completed August 9, 2026; Phase 2 completed August 9, 2026)
+**Version:** 0.3
+**Date:** August 8, 2026 (Phase 1 completed August 9, 2026; Phase 2 completed August 9, 2026; Phase 3 completed August 11, 2026)
 **Season:** 2026 NFL
 **Platform:** Sleeper
-**Status:** Phase 2 code complete and pushed (weekly brief, start/sit, GitHub Actions scheduling, `refresh` escape hatch) — see §8 for two still-open verification items (real cron firing, live rostered-team test) before calling it fully done. Phase 3 (waivers + FAAB, trade evaluation, bench-points-lost tracking) not yet started.
+**Status:** Phases 0-3 code complete and pushed. Phase 2's cron trigger is now confirmed firing on its own (§8); its other open item (live rostered-team test) and Phase 3's live cross-manager/FAAB/bench-report verification are all blocked on the same two structural gaps, not on anything in this codebase: Sleeper's offseason transaction lock (blocks all roster adds until real preseason roster cuts, historically late August) and the sandbox league being single-manager (no second real manager or completed games exist yet). Both resolve on their own as the real season approaches -- see §8 for detail.
 
 ---
 
@@ -256,7 +256,7 @@ Sequenced against a hard draft deadline of 2–4 weeks out.
 - **One thing still open, not yet verified:**
   1. **No live verification against a real rostered team.** The sandbox league's rosters are still empty (the Phase 1 mock draft wasn't tied to league rosters — see §6.1). `startsit`/`brief` have been smoke-tested live against the sandbox league's empty-roster/no-matchup-data state (confirms R2 degrades cleanly) but not against real projections or a real optimal-lineup computation. **Root cause identified (2026-08-11):** it's not a draft-status block. Sleeper's free-agent "Add" flow returns "You may not add players in the offseason" — a league-wide transaction lock tied to Sleeper's NFL-calendar offseason state, independent of this league's own `pre_draft` draft status. Confirmed via the actual commissioner UI (Commissioner Control has no roster-edit tool either; only the free-agent add flow exists, and it's the one that's locked). Expected to lift once Sleeper exits the offseason transaction window (historically around final NFL roster cuts, late August) — no action needed, just re-check `startsit`/`brief` against a real roster once adds are possible again.
 
-### Phase 3 — In season
+### Phase 3 — Done (2026-08-11)
 
 - **Waivers + FAAB — Done (2026-08-11).**
   - `ffai/waivers.py`, `ffai/cli.py waivers` — ranks the full waiver-wire free-agent pool (`compute_free_agents`, sharing `is_draftable`/`build_projection` with the draft board so the two stay consistent).
@@ -276,7 +276,14 @@ Sequenced against a hard draft deadline of 2–4 weeks out.
   - **Deliberate simplification:** `lineup_delta` treats the season as one static lineup-optimization problem on season-aggregate points, not a week-by-week rest-of-season simulation -- that would need weekly rest-of-season projections per remaining week, which the projections adapter doesn't provide (R5, PRD 4.2).
   - 15 new tests (`tests/test_trade.py` + additions to `test_roster.py`/`test_cli.py`), 188 total passing.
   - Smoke-tested live against the sandbox league: error paths confirmed clean (no crash) for an unknown manager name and an unresolvable player name; the ambiguity guard fired for real on live data (Sleeper's directory has two players named "Josh Allen" -- the Bills QB and a Jaguars DE -- correctly refused rather than silently picking one). Full success-path evaluation exercised end-to-end (board building, VORP lookup, lineup delta, verdict, formatting) using a same-roster stand-in trade, since the sandbox league is single-manager -- no second real manager exists yet to run a genuine two-sided trade against. Real cross-manager verification is blocked on the real 2026 league (Open Question #1), not on anything in this codebase.
-- Bench-points-lost tracking
+
+- **Bench-points-lost tracking — Done (2026-08-11).**
+  - `ffai/retrospective.py`, `ffai/cli.py bench-report [--start-week N] [--end-week N]` -- PRD §1's Tier 2 headline metric ("points left on the bench — weekly delta between the started lineup and the retrospectively optimal lineup... trending down over the season means the start/sit engine is earning its keep").
+  - **Computed exactly, no judgment involved** (as PRD §1 specifies): pulls REAL final stats for a completed week (`GET /stats/nfl/regular/{season}/{week}`, wrapped as `repository.fetch_stats`, last-known-good cached) -- not projections -- and reuses `lineup.optimize_lineup` completely unmodified, exactly as anticipated back in Phase 2's implementation note. A lightweight stand-in object (`SimpleNamespace(raw_stats_by_player=..., source="actual")`) gives `player_pool.build_projection` the same interface a real `ProjectionsResult` has, so the projected-points join code didn't need to fork for actual stats.
+  - Compares the retrospectively optimal lineup's total against the matchup's actually-started total (`matchup.points`, falling back to summing starters' own scored stats if that field is ever absent) and reports which specific players should have started/been benched, not just the point delta.
+  - `compute_season_bench_report` runs this across a week range (default: week 1 through the last COMPLETED week, auto-detected via NFL state so the current in-progress week -- not yet final -- is excluded) for the season-long trend the metric is meant to show. Weeks with no matchup/roster/stats data yet are skipped with a stated reason (R2), not an error -- the normal case for most of the season right now.
+  - 22 new tests (`tests/test_retrospective.py` + additions to `test_repository.py`/`test_cli.py`), 203 total passing.
+  - Smoke-tested live against the sandbox league: correctly reports "No completed weeks with data yet" (auto-detected end week is 0, since the season hasn't started) and, forced to check week 1 explicitly, correctly skips it with "no roster/matchup data for this week yet" rather than crashing -- consistent with every other Phase 2/3 live-roster-dependent item this session, all blocked on the same offseason lock. Cannot be meaningfully verified against real bench-points-lost numbers until actual games are played, which is inherent to what this feature measures, not a gap in the implementation.
 
 ---
 

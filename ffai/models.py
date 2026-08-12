@@ -78,3 +78,13 @@ class TradeSideResult:
 class TradeEvaluation:
     sides: list  # list[TradeSideResult], one per team
     verdict: str
+
+
+@dataclass
+class BenchPointsLostResult:
+    week: int
+    actual_points: float  # what your actually-started lineup scored, from real final stats
+    optimal_points: float  # what the retrospectively optimal lineup would have scored
+    bench_points_lost: float  # optimal_points - actual_points (>= 0 by construction)
+    swapped_in: list  # list[PlayerProjection] -- benched players who should have started
+    swapped_out: list  # list[PlayerProjection] -- started players who should have been benched

@@ -172,6 +172,26 @@ def fetch_user(client: SleeperClient, cache: Cache, username: str):
     return data, False, fetched_at
 
 
+def fetch_stats(client: SleeperClient, cache: Cache, season: str, week: int):
+    """Real final per-player stats for a completed week -- same last-known-good
+    shape as fetch_league. Returns (data, stale, fetched_at). Used by
+    retrospective.py for PRD's Tier 2 headline metric (bench points lost),
+    NOT by the projections adapter (that's projected stats, a different
+    concern entirely -- see projections.py, R5)."""
+    key = f"stats:{season}:{week}"
+    try:
+        data = client.get_stats(season, week)
+    except SleeperAPIError:
+        cached = cache.get(key)
+        if cached is None:
+            raise
+        payload, fetched_at = cached
+        return payload, True, fetched_at
+
+    fetched_at = cache.set(key, data)
+    return data, False, fetched_at
+
+
 def fetch_trending_adds(client: SleeperClient, cache: Cache, lookback_hours: int = 24, limit: int = 100):
     """Same last-known-good shape as fetch_league. Returns (data, stale, fetched_at).
     Trending data is a supplementary waiver-target signal (PRD 6.3), not

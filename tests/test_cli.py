@@ -108,6 +108,26 @@ def test_trade_subcommand_requires_send_receive_and_with():
         pass
 
 
+def test_bench_report_subcommand_defaults():
+    parser = build_parser()
+
+    args = parser.parse_args(["bench-report"])
+
+    assert args.command == "bench-report"
+    assert args.league_id == LEAGUE_ID
+    assert args.start_week == 1
+    assert args.end_week is None
+
+
+def test_bench_report_subcommand_accepts_week_range():
+    parser = build_parser()
+
+    args = parser.parse_args(["bench-report", "--start-week", "2", "--end-week", "5"])
+
+    assert args.start_week == 2
+    assert args.end_week == 5
+
+
 def test_no_command_raises_system_exit():
     parser = build_parser()
 

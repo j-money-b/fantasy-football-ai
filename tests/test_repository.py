@@ -2,7 +2,7 @@ import pytest
 
 from ffai.cache import Cache
 from ffai.projections import ProjectionsResult
-from ffai.repository import PLAYERS_CACHE_KEY, fetch_league, fetch_players, fetch_projections, fetch_trending_adds
+from ffai.repository import PLAYERS_CACHE_KEY, fetch_league, fetch_players, fetch_projections, fetch_stats, fetch_trending_adds
 from ffai.sleeper_client import SleeperAPIError
 
 
@@ -17,10 +17,11 @@ class FakeProjectionsAdapter:
 
 
 class FakeClient:
-    def __init__(self, league_data=None, players_data=None, trending_data=None, raises=False):
+    def __init__(self, league_data=None, players_data=None, trending_data=None, stats_data=None, raises=False):
         self.league_data = league_data
         self.players_data = players_data
         self.trending_data = trending_data
+        self.stats_data = stats_data
         self.raises = raises
         self.calls = 0
 
@@ -41,6 +42,12 @@ class FakeClient:
         if self.raises:
             raise SleeperAPIError("simulated failure")
         return self.trending_data
+
+    def get_stats(self, season, week):
+        self.calls += 1
+        if self.raises:
+            raise SleeperAPIError("simulated failure")
+        return self.stats_data
 
 
 def test_live_success_caches_and_returns_fresh(tmp_path):
@@ -197,3 +204,33 @@ def test_fetch_trending_adds_live_failure_with_no_cache_raises(tmp_path):
 
     with pytest.raises(SleeperAPIError):
         fetch_trending_adds(failing_client, cache)
+
+
+def test_fetch_stats_live_success_caches_and_returns(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    client = FakeClient(stats_data={"1": {"pass_td": 3}})
+
+    data, stale, fetched_at = fetch_stats(client, cache, "2026", 1)
+
+    assert data == {"1": {"pass_td": 3}}
+    assert stale is False
+    assert fetched_at
+
+
+def test_fetch_stats_live_failure_falls_back_to_cache(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    cache.set("stats:2026:1", {"1": {"pass_td": 1}})
+    failing_client = FakeClient(raises=True)
+
+    data, stale, fetched_at = fetch_stats(failing_client, cache, "2026", 1)
+
+    assert data == {"1": {"pass_td": 1}}
+    assert stale is True
+
+
+def test_fetch_stats_live_failure_with_no_cache_raises(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    failing_client = FakeClient(raises=True)
+
+    with pytest.raises(SleeperAPIError):
+        fetch_stats(failing_client, cache, "2026", 1)

@@ -14,6 +14,7 @@ from ffai.player_pool import is_draftable, to_projection_pool
 from ffai.projections import ProjectionsAdapter
 from ffai.repository import (
     fetch_league,
+    fetch_nfl_state,
     fetch_players,
     fetch_projections,
     fetch_rosters,
@@ -21,6 +22,7 @@ from ffai.repository import (
     fetch_user,
     fetch_users,
 )
+from ffai.retrospective import compute_season_bench_report, format_bench_report
 from ffai.roster import find_display_name, find_my_roster, find_roster_by_display_name
 from ffai.sleeper_client import SleeperAPIError, SleeperClient
 from ffai.trade import evaluate_trade, format_trade_evaluation, resolve_player_ids
@@ -175,6 +177,55 @@ def cmd_trade(args):
 
     evaluation = evaluate_trade(party_a, party_b, board_by_id, roster_positions)
     print(format_trade_evaluation(evaluation))
+    return 0
+
+
+def cmd_bench_report(args):
+    client = SleeperClient()
+    cache = Cache(db_path=CACHE_DB_PATH)
+
+    league, league_stale, _ = fetch_league(client, cache, args.league_id)
+    if league_stale:
+        print("WARNING: using cached league data (live fetch failed)")
+
+    players_raw, players_stale, _ = fetch_players(client, cache)
+    if players_stale:
+        print("WARNING: using cached player dictionary (live fetch failed)")
+
+    rosters, rosters_stale, _ = fetch_rosters(client, cache, args.league_id)
+    if rosters_stale:
+        print("WARNING: using cached rosters (live fetch failed)")
+
+    user, user_stale, _ = fetch_user(client, cache, SLEEPER_USERNAME)
+    if user_stale:
+        print("WARNING: using cached user lookup (live fetch failed)")
+
+    my_roster = find_my_roster(rosters, user.get("user_id"))
+    if my_roster is None:
+        print("No roster found for you in this league yet -- can't compute bench points lost.")
+        return 1
+
+    end_week = args.end_week
+    if end_week is None:
+        state, state_stale, _ = fetch_nfl_state(client, cache)
+        if state_stale:
+            print("WARNING: using cached NFL state (live fetch failed)")
+        end_week = max((state.get("week") or 1) - 1, 0)  # last COMPLETED week -- this week isn't final yet
+
+    if end_week < args.start_week:
+        print("No completed weeks with data yet.")
+        return 0
+
+    scoring_settings = league.get("scoring_settings", {})
+    roster_positions = league.get("roster_positions", [])
+    season = league.get("season")
+    byes_by_team = load_bye_weeks()
+
+    results, skipped = compute_season_bench_report(
+        client, cache, args.league_id, my_roster["roster_id"], players_raw,
+        scoring_settings, roster_positions, season, args.start_week, end_week, byes_by_team,
+    )
+    print(format_bench_report(results, skipped))
     return 0
 
 
@@ -342,6 +393,16 @@ def build_parser():
     trade_parser.add_argument("--with", dest="with_manager", required=True, help="The other manager's Sleeper display name")
     trade_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
     trade_parser.set_defaults(func=cmd_trade)
+
+    bench_report_parser = subparsers.add_parser(
+        "bench-report", help="Points left on the bench by week -- the Tier 2 headline metric"
+    )
+    bench_report_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
+    bench_report_parser.add_argument("--start-week", type=int, default=1, help="First week to include (default: 1)")
+    bench_report_parser.add_argument(
+        "--end-week", type=int, default=None, help="Last week to include (default: last completed week)"
+    )
+    bench_report_parser.set_defaults(func=cmd_bench_report)
 
     return parser
 
