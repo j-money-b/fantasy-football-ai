@@ -155,6 +155,25 @@ class SleeperClient:
 
         return data
 
+    def get_trending_players(self, trend_type: str = "add", lookback_hours: int = 24, limit: int = 25) -> list:
+        """Players with the most adds/drops across ALL Sleeper leagues recently
+        (trend_type: "add" | "drop"), not scoped to any one league. Used as a
+        supplementary waiver-target signal, and as the primary ranking signal
+        when projections are fully degraded (PRD 6.3)."""
+        url = f"{self.base_url}/players/nfl/trending/{trend_type}"
+        params = {"lookback_hours": lookback_hours, "limit": limit}
+        try:
+            response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise SleeperAPIError(f"Failed to fetch trending {trend_type} players: {exc}") from exc
+
+        data = response.json()
+        if not isinstance(data, list):
+            raise SleeperAPIError(f"Unexpected response fetching trending {trend_type} players: {data!r}")
+
+        return data
+
     def get_stats(self, season: str, week: int) -> dict:
         """Actual (not projected) per-player raw stats for one week. Keyed by
         player_id for individual players; team defenses use a "TEAM_XXX" key."""

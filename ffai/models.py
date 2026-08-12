@@ -45,3 +45,11 @@ class LineupResult:
     slots: list  # list[LineupSlot], in roster_positions order
     bench: list  # list[PlayerProjection]
     total_points: float = 0.0
+
+
+@dataclass
+class WaiverTarget:
+    player: PlayerProjection
+    marginal_value: float  # points this player would add to my optimal lineup right now, vs. today
+    trending_count: "int | None"
+    reasons: list  # list[str]

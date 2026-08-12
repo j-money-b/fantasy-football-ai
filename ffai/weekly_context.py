@@ -53,6 +53,8 @@ class WeeklyContext:
     opponent_players: list  # list[PlayerProjection]
     projections_degraded: bool
     warnings: list = field(default_factory=list)  # staleness + degradation notes, for the R1 banner
+    rosters: list = field(default_factory=list)  # every roster in the league -- waivers.py needs this to find free agents
+    projections: "object | None" = None  # the raw ProjectionsResult -- waivers.py needs this to score free agents
 
 
 def gather_weekly_context(
@@ -151,6 +153,8 @@ def gather_weekly_context(
         opponent_players=opponent_players,
         projections_degraded=projections.degraded,
         warnings=warnings,
+        rosters=rosters,
+        projections=projections,
     )
 
 

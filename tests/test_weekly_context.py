@@ -87,6 +87,8 @@ def test_gather_weekly_context_resolves_my_roster_and_opponent(tmp_path):
     assert {p.player_id for p in context.opponent_players} == {"3"}
     assert context.projections_degraded is False
     assert context.warnings == []
+    assert context.rosters == ROSTERS_DATA
+    assert context.projections.raw_stats_by_player == {"1": {"rec": 0}, "2": {"rec": 3}, "3": {"rec": 5, "rec_yd": 40}}
 
 
 def test_gather_weekly_context_accepts_explicit_week_override(tmp_path):

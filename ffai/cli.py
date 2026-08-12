@@ -11,9 +11,19 @@ from ffai.draft_assistant import DraftAssistant, format_recommendation
 from ffai.lineup import format_lineup, optimize_lineup
 from ffai.player_pool import is_draftable, to_projection_pool
 from ffai.projections import ProjectionsAdapter
-from ffai.repository import fetch_league, fetch_players, fetch_projections
-from ffai.sleeper_client import SleeperClient
+from ffai.repository import fetch_league, fetch_players, fetch_projections, fetch_trending_adds
+from ffai.sleeper_client import SleeperAPIError, SleeperClient
 from ffai.vorp import build_tiers, compute_replacement_levels, compute_vorp
+from ffai.waivers import (
+    compute_free_agents,
+    faab_bid_ranges,
+    format_waiver_report,
+    is_faab,
+    priority_judgment,
+    rank_waiver_targets,
+    waiver_system_label,
+    budget_pace_warning,
+)
 from ffai.weekly_context import gather_weekly_context
 
 
@@ -109,6 +119,68 @@ def _format_startsit_text(context):
     return "\n".join(lines)
 
 
+def _format_waivers_text(context, client, cache):
+    if context.my_roster is None:
+        return "No roster found for you in this league yet -- can't compute waiver targets."
+
+    league_settings = context.league.get("settings", {})
+    scoring_settings = context.league.get("scoring_settings", {})
+    roster_settings = context.my_roster.get("settings", {}) or {}
+    byes_by_team = load_bye_weeks()
+
+    trending_counts = {}
+    try:
+        trending, _, _ = fetch_trending_adds(client, cache)
+        trending_counts = {row["player_id"]: row.get("count") for row in trending if row.get("player_id")}
+    except SleeperAPIError:
+        pass  # supplementary signal only (PRD 6.3), not load-bearing
+
+    free_agents = compute_free_agents(
+        context.players_raw, context.rosters, context.projections, scoring_settings, byes_by_team
+    )
+    targets = rank_waiver_targets(
+        free_agents,
+        context.my_players,
+        context.roster_positions,
+        trending_counts=trending_counts,
+        projections_degraded=context.projections_degraded,
+    )
+
+    label = waiver_system_label(league_settings)
+    faab = is_faab(league_settings)
+
+    lines = []
+    if context.projections_degraded:
+        lines.append("NO PROJECTIONS AVAILABLE -- waiver targets ranked by roster need and trending-add velocity only.")
+        lines.append("")
+
+    if faab:
+        remaining = league_settings.get("waiver_budget", 0) - roster_settings.get("waiver_budget_used", 0)
+        bids = faab_bid_ranges(targets, remaining)
+        pace = budget_pace_warning(league_settings, roster_settings, context.week)
+        lines.append(format_waiver_report(targets, label, True, remaining_budget=remaining, faab_bids=bids, pace_warning=pace))
+    else:
+        priority_note = priority_judgment(targets[0] if targets else None, waiver_position=roster_settings.get("waiver_position"))
+        lines.append(format_waiver_report(targets, label, False, priority_note=priority_note))
+
+    if context.warnings:
+        lines.append("")
+        lines.append("WARNINGS:")
+        for warning in context.warnings:
+            lines.append(f"  - {warning}")
+
+    return "\n".join(lines)
+
+
+def cmd_waivers(args):
+    client = SleeperClient()
+    cache = Cache(db_path=CACHE_DB_PATH)
+
+    context = gather_weekly_context(client, cache, args.league_id, week=args.week)
+    print(_format_waivers_text(context, client, cache))
+    return 0
+
+
 def cmd_startsit(args):
     client = SleeperClient()
     cache = Cache(db_path=CACHE_DB_PATH)
@@ -136,14 +208,14 @@ def cmd_brief(args):
 def cmd_refresh(args):
     """R7: the escape hatch. Forces a fresh pull bypassing the player
     dictionary's normal once-daily cache policy, and prints a plain-text
-    start/sit summary -- the closest existing equivalent to "save the bad
-    Tuesday" until waivers ship in Phase 3, at which point this extends to
-    include a waiver summary too."""
+    start/sit summary plus a waiver summary -- "save the bad Tuesday"."""
     client = SleeperClient()
     cache = Cache(db_path=CACHE_DB_PATH)
 
     context = gather_weekly_context(client, cache, args.league_id, week=args.week, player_dict_max_age_hours=0)
     print(_format_startsit_text(context))
+    print()
+    print(_format_waivers_text(context, client, cache))
     return 0
 
 
@@ -168,10 +240,15 @@ def build_parser():
     brief_parser.add_argument("--out", default=None, help="Write the brief to this file instead of stdout")
     brief_parser.set_defaults(func=cmd_brief)
 
-    refresh_parser = subparsers.add_parser("refresh", help="Escape hatch: force a fresh pull, print start/sit summary")
+    refresh_parser = subparsers.add_parser("refresh", help="Escape hatch: force a fresh pull, print start/sit + waiver summary")
     refresh_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
     refresh_parser.add_argument("--week", type=int, default=None, help="Week override (default: auto-detected)")
     refresh_parser.set_defaults(func=cmd_refresh)
+
+    waivers_parser = subparsers.add_parser("waivers", help="Waiver-wire targets ranked for the current week")
+    waivers_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
+    waivers_parser.add_argument("--week", type=int, default=None, help="Week override (default: auto-detected)")
+    waivers_parser.set_defaults(func=cmd_waivers)
 
     return parser
 

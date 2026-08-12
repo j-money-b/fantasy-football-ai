@@ -172,6 +172,27 @@ def fetch_user(client: SleeperClient, cache: Cache, username: str):
     return data, False, fetched_at
 
 
+def fetch_trending_adds(client: SleeperClient, cache: Cache, lookback_hours: int = 24, limit: int = 100):
+    """Same last-known-good shape as fetch_league. Returns (data, stale, fetched_at).
+    Trending data is a supplementary waiver-target signal (PRD 6.3), not
+    load-bearing -- callers are expected to catch SleeperAPIError on a
+    live-failure-with-no-cache and continue without it, the same way
+    weekly_context.py already treats a missing matchups fetch as a normal
+    degraded case rather than an error."""
+    key = f"trending_add:{lookback_hours}:{limit}"
+    try:
+        data = client.get_trending_players("add", lookback_hours=lookback_hours, limit=limit)
+    except SleeperAPIError:
+        cached = cache.get(key)
+        if cached is None:
+            raise
+        payload, fetched_at = cached
+        return payload, True, fetched_at
+
+    fetched_at = cache.set(key, data)
+    return data, False, fetched_at
+
+
 def fetch_draft_picks(client: SleeperClient, cache: Cache, draft_id: str):
     """Always attempts a live fetch -- unlike fetch_players, there's no
     "fresh enough" cache window here, since the picks feed changes constantly

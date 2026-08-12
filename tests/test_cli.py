@@ -65,6 +65,24 @@ def test_refresh_subcommand_defaults():
     assert args.league_id == LEAGUE_ID
 
 
+def test_waivers_subcommand_defaults():
+    parser = build_parser()
+
+    args = parser.parse_args(["waivers"])
+
+    assert args.command == "waivers"
+    assert args.league_id == LEAGUE_ID
+    assert args.week is None
+
+
+def test_waivers_subcommand_accepts_week_override():
+    parser = build_parser()
+
+    args = parser.parse_args(["waivers", "--week", "5"])
+
+    assert args.week == 5
+
+
 def test_no_command_raises_system_exit():
     parser = build_parser()
 
