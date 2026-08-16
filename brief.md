@@ -1,6 +1,6 @@
-# Weekly Brief -- Week 1
+# Weekly Brief -- Week 2
 
-Last successful run: 2026-08-11T14:10:04.651445+00:00
+Last successful run: 2026-08-16T13:22:29.156586+00:00
 
 ## Your Lineup
 Recommended lineup (0.0 pts):
@@ -15,5 +15,5 @@ Recommended lineup (0.0 pts):
   - K: (empty)
   - DEF: (empty)
 
-## Opponent (Week 1)
+## Opponent (Week 2)
 No matchup data available yet.
