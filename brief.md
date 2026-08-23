@@ -1,6 +1,6 @@
 # Weekly Brief -- Week 2
 
-Last successful run: 2026-08-18T13:33:23.575854+00:00
+Last successful run: 2026-08-23T13:23:37.547078+00:00
 
 ## Your Lineup
 Recommended lineup (0.0 pts):
