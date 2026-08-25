@@ -2,9 +2,10 @@ import os
 
 SLEEPER_BASE_URL = "https://api.sleeper.app/v1"
 
-# Sandbox league (Phase 0 dev fixture). Swap by setting SLEEPER_LEAGUE_ID once
-# the real 2026 league exists (PRD Open Question #1) -- no code change needed.
-LEAGUE_ID = os.environ.get("SLEEPER_LEAGUE_ID", "1391979274122035200")
+# Real 2026 league ("The Tush Pushers", PRD Open Question #1 -- resolved 2026-08-24).
+# Override with SLEEPER_LEAGUE_ID to point at the sandbox league (1391979274122035200)
+# for testing instead.
+LEAGUE_ID = os.environ.get("SLEEPER_LEAGUE_ID", "1389331182289719296")
 
 SLEEPER_USERNAME = os.environ.get("SLEEPER_USERNAME", "kevinkissedpeter")
 

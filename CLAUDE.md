@@ -6,9 +6,14 @@ An AI fantasy football manager built on the Sleeper API. It advises — it does 
 
 ## League context
 
-- **Sandbox league ID:** `1391979274122035200` — a real Sleeper league (created by the user, single-manager, full commissioner tools available), being used as a development sandbox until the real 2026 league exists. It is NOT a synthetic/limited mock object — treat it as a genuine league with normal Sleeper functionality (commissioner roster edits, waivers, etc. all work as they would in any real league). It just isn't the actual 2026 league with the other 11 managers.
+- **Real 2026 league ID:** `1389331182289719296` — "The Tush Pushers," confirmed 2026-08-24. This is now the default `LEAGUE_ID` in `ffai/config.py`. **10 teams total** (you + 9 other managers, not 11 -- correct earlier docs that said eleven).
+- **Draft:** snake, 14 rounds, standard 10-team slots (QB/RB/RB/WR/WR/TE/FLEX/K/DEF/5 BN). Scheduled **2026-08-30, 13:00 ET** (`draft_id` `1389331182289719297`, currently `pre_draft`, `draft_order` not yet set). This is the hard deadline referenced throughout the PRD.
+- **Scoring:** standard passing (4pt/TD, -1 INT), full PPR (1.0/rec), 6pt return/pick-six TDs, missed FG/XP penalties. Same scoring carried over from last season.
+- **Waivers:** FAAB, $100 budget (`waiver_type: 2`), same as last year.
+- **Keepers:** league settings still show `max_keepers: 1`, but the user believes keeping isn't actually in play this year. **Unconfirmed** -- verify with the commissioner before the draft. If keeping turns out to be active, the draft assistant needs work first: it currently ships with pure redraft VORP/tiers, no keeper-specific logic (see PRD Open Question #5).
+- **Opponent scouting (PRD Open Question #4, resolved):** this league's `previous_league_id` is `1261164996717453313`, confirmed to be the same manager group's 2025 season ("The Tush Pushers," 10 teams, same scoring, FAAB). The user was not in that league. Real per-manager 2025 FAAB spend (`waiver_budget_used` / 100): two managers spent their full budget (owners `724450157927714816`, `199936627823353856`), one spent almost nothing (`2`, owner `1001643411927068672`), rest spread 10-53. Worth folding into waiver/FAAB reasoning once manager identities are mapped to this year's rosters.
+- **Sandbox league ID:** `1391979274122035200` -- still a real Sleeper league (single-manager, full commissioner tools), now used purely for testing/dev rather than as the primary league. Override via `SLEEPER_LEAGUE_ID` env var to point commands at it instead of the real league.
 - **Sleeper username:** `kevinkissedpeter`
-- The real 2026 league ID is not yet known (Sleeper mints a new ID each season). Do not reuse a prior season's league ID.
 
 ## How to work with the user
 

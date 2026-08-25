@@ -14,7 +14,7 @@
 
 Managing a fantasy football team well requires consistent weekly attention: setting an optimal lineup, monitoring injury and depth-chart changes, identifying waiver targets before the rest of the league, and pricing FAAB bids correctly. Most managers do this from memory and vibes, on a phone, five minutes before kickoff. The information needed to do it well is public and free, but scattered and tedious to assemble by hand every week.
 
-The user is new to this league and new to Sleeper (previously played on another platform), joining eleven managers who have played together before. There is no personal league history to draw on.
+The user is new to this league and new to Sleeper (previously played on another platform), joining nine other managers who have played together before (10-team league, confirmed 2026-08-24). There is no personal league history to draw on directly, though the group's 2025 season is now visible -- see Open Question #4.
 
 ### What Winning Looks Like
 
@@ -291,11 +291,11 @@ Sequenced against a hard draft deadline of 2–4 weeks out.
 
 | # | Question | Blocking? | Notes |
 |---|---|---|---|
-| 1 | 2026 league ID | Phase 1 completion | League not yet created. Sleeper mints a **new ID each season**; last year's will not work. Ask commissioner to create early rather than the night before the draft — costs nothing to sit idle and de-risks the draft assistant. |
-| 2 | Waiver system: FAAB or rolling priority | No | Read from league settings. Both supported. |
-| 3 | Scoring format & roster slots | No | Auto-discovered from league object. |
-| 4 | Opponent scouting from league's 2025 season | No | These managers played together last year. `previous_league_id` on the 2026 league links back to it — potentially yields draft tendencies, waiver aggression, FAAB behavior for eleven unfamiliar opponents. Genuinely valuable for a newcomer. Cannot confirm data quality until visible. **Scoping question, not a requirement.** |
-| 5 | Keeper/dynasty format? | No (deferred) | Phase 1's draft assistant shipped without keeper/dynasty-specific logic (redraft VORP/tiers only) since the real league's format is still unknown. Changes draft logic substantially if the real league turns out to be keeper/dynasty -- revisit once real league settings are known, before relying on it for the actual draft. |
+| 1 | 2026 league ID | **Resolved 2026-08-24** | `1389331182289719296` ("The Tush Pushers"). 10 teams total (9 other managers, not 11 -- earlier docs overstated this). Draft is snake, 14 rounds, scheduled 2026-08-30 13:00 ET -- see `CLAUDE.md` League context for full detail. `ffai/config.py` `LEAGUE_ID` default updated accordingly. |
+| 2 | Waiver system: FAAB or rolling priority | No | Confirmed FAAB, $100 budget, same as league's 2025 season. |
+| 3 | Scoring format & roster slots | No | Confirmed: standard 4pt passing TD, full PPR, same as 2025. Auto-discovered from league object regardless. |
+| 4 | Opponent scouting from league's 2025 season | **Resolved 2026-08-24** | Confirmed: this league's `previous_league_id` (`1261164996717453313`) is the same manager group's 2025 season. Real FAAB spend data pulled -- see `CLAUDE.md`. Not yet folded into waiver/FAAB reasoning code -- still an opportunity, not wired up. |
+| 5 | Keeper/dynasty format? | No (deferred) | League settings still show `max_keepers: 1` for 2026, same as 2025's. User believes keeping is not actually in play this year but this is **unconfirmed** -- verify with commissioner before 2026-08-30 draft. If active, draft assistant needs keeper-specific logic first (currently redraft-only VORP/tiers). |
 | 6 | Paid projections (e.g. FantasyPros API) ever worth it? | No | Pricing not verified — do not assume. Not needed for year one. |
 
 ### Known non-issues
