@@ -103,7 +103,7 @@ def test_detect_positional_run_none_when_no_run(tmp_path):
     assert assistant.detect_positional_run() is None
 
 
-def test_recommend_picks_best_available_by_vorp_with_gap_and_tier_reasoning(tmp_path):
+def test_recommend_picks_best_marginal_value_with_tier_reasoning(tmp_path):
     cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
     board = [_player("a", "RB", vorp=20, tier=1), _player("b", "WR", vorp=12, tier=2)]
     assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1)
@@ -112,9 +112,167 @@ def test_recommend_picks_best_available_by_vorp_with_gap_and_tier_reasoning(tmp_
 
     assert rec.player.player_id == "a"
     assert rec.degraded is False
-    assert any("VORP" in r and "8.0 ahead" in r for r in rec.reasons)
+    assert any("add 20.0 pts" in r for r in rec.reasons)
     assert any("Tier 1" in r for r in rec.reasons)
     assert any("no RB rostered yet" in r for r in rec.reasons)
+
+
+def test_recommend_healthy_stops_chasing_a_filled_position(tmp_path):
+    """The core repro of the real bug: a 3rd TE that still looks great by
+    raw VORP (a steep post-tier1 cliff inflates it) but scores fewer actual
+    points than every starter already rostered must lose to a candidate at
+    a position with real open roster capacity (K), even though the K's raw
+    VORP is far lower."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    my_drafted_players = [
+        PlayerVorp(player_id="rb1", name="RB1", position="RB", team="AAA", bye_week=None, points=40, data_source="sleeper", vorp=15, tier=1),
+        PlayerVorp(player_id="rb2", name="RB2", position="RB", team="BBB", bye_week=None, points=35, data_source="sleeper", vorp=12, tier=1),
+        PlayerVorp(player_id="wr1", name="WR1", position="WR", team="CCC", bye_week=None, points=38, data_source="sleeper", vorp=14, tier=1),
+        PlayerVorp(player_id="wr2", name="WR2", position="WR", team="DDD", bye_week=None, points=33, data_source="sleeper", vorp=11, tier=1),
+        PlayerVorp(player_id="te1", name="TE1", position="TE", team="EEE", bye_week=None, points=30, data_source="sleeper", vorp=20, tier=1),
+        PlayerVorp(player_id="flex_rb", name="FlexRB", position="RB", team="FFF", bye_week=None, points=28, data_source="sleeper", vorp=8, tier=2),
+        PlayerVorp(player_id="flex_wr", name="FlexWR", position="WR", team="GGG", bye_week=None, points=26, data_source="sleeper", vorp=6, tier=2),
+    ]
+    te_candidate = PlayerVorp(
+        player_id="te2", name="TE2", position="TE", team="HHH", bye_week=None,
+        points=20, data_source="sleeper", vorp=37, tier=1,
+    )
+    k_candidate = PlayerVorp(
+        player_id="k1", name="K1", position="K", team="III", bye_week=None,
+        points=9, data_source="sleeper", vorp=3, tier=3,
+    )
+
+    board = [te_candidate, k_candidate]
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1)
+    assistant.my_drafted_players = my_drafted_players
+
+    rec = assistant.recommend()
+
+    assert rec.player.player_id == "k1"
+    assert any("add 9.0 pts" in r for r in rec.reasons)
+
+
+def test_recommend_healthy_falls_back_to_vorp_once_lineup_is_full(tmp_path):
+    """Once every starting slot is genuinely saturated, marginal value is 0
+    for everyone -- VORP (best remaining talent) breaks the tie rather than
+    leaving the ordering arbitrary."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    starters = [
+        PlayerVorp(player_id="qb", name="QB", position="QB", team="Z1", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="rb1", name="RB1", position="RB", team="Z2", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="rb2", name="RB2", position="RB", team="Z3", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="wr1", name="WR1", position="WR", team="Z4", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="wr2", name="WR2", position="WR", team="Z5", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="te", name="TE", position="TE", team="Z6", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="flexrb", name="FlexRB", position="RB", team="Z7", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="flexwr", name="FlexWR", position="WR", team="Z8", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="k", name="K", position="K", team="Z9", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="def", name="DEF", position="DEF", team="Z10", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+    ]
+    cand_a = PlayerVorp(player_id="a", name="CandA", position="RB", team="Y1", bye_week=None, points=10, data_source="sleeper", vorp=5, tier=2)
+    cand_b = PlayerVorp(player_id="b", name="CandB", position="WR", team="Y2", bye_week=None, points=8, data_source="sleeper", vorp=9, tier=2)
+
+    board = [cand_a, cand_b]
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1)
+    assistant.my_drafted_players = starters
+
+    rec = assistant.recommend()
+
+    assert rec.player.player_id == "b"
+    assert any("Wouldn't crack your starting lineup" in r for r in rec.reasons)
+
+
+def test_recommend_prefers_consensus_backed_alternative_in_same_tier(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [
+        _player("outlier", "TE", vorp=40, tier=1, name="Outlier TE"),
+        _player("safe", "TE", vorp=35, tier=1, name="Safe TE"),
+    ]
+    consensus = {"TE": [ConsensusEntry(name="Safe TE", team="XXX", position="TE", raw_stats={}, player_id="safe")]}
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1, consensus_top10=consensus
+    )
+
+    rec = assistant.recommend()
+
+    assert rec.player.player_id == "safe"
+    assert any("Preferred over Outlier TE" in r for r in rec.reasons)
+
+
+def test_recommend_does_not_swap_across_positions_for_consensus_dampening(tmp_path):
+    """Regression: global VORP tiers span positions, so matching on tier
+    alone once let this suggest a DEF as a 'close in value' alternative to
+    a non-consensus-backed WR. The alt search must be scoped to the same
+    position, and a position with no FantasyPros coverage at all (DEF)
+    must never count as 'safer' just because it has no data to contradict."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [
+        _player("outlier_wr", "WR", vorp=40, tier=1, name="Outlier WR"),
+        _player("def1", "DEF", vorp=38, tier=1, name="Some DEF"),
+    ]
+    consensus = {"WR": [ConsensusEntry(name="Someone Else", team="XXX", position="WR", raw_stats={}, player_id="elsewhere")]}
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1, consensus_top10=consensus
+    )
+
+    rec = assistant.recommend()
+
+    assert rec.player.player_id == "outlier_wr"
+    assert any("no comparable consensus-backed alternative" in r for r in rec.reasons)
+
+
+def test_recommend_notes_caution_when_no_consensus_backed_alternative_exists(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [_player("only", "TE", vorp=40, tier=1, name="Only TE")]
+    consensus = {
+        "TE": [ConsensusEntry(name="Someone Else", team="XXX", position="TE", raw_stats={}, player_id="elsewhere")]
+    }
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1, consensus_top10=consensus
+    )
+
+    rec = assistant.recommend()
+
+    assert rec.player.player_id == "only"
+    assert any(
+        "isn't in FantasyPros' consensus top 10" in r and "no comparable consensus-backed alternative" in r
+        for r in rec.reasons
+    )
+
+
+def test_picks_until_my_turn_computes_snake_distance(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", [], ROSTER_POSITIONS, my_draft_slot=4, total_rosters=4
+    )
+
+    assert assistant._picks_until_my_turn() == 3
+
+    # picks 1-4 (round 1) are made; pick 5 (round 2, snake-reversed) is slot 4's turn again
+    assistant.picks = [_pick(i, f"p{i}") for i in range(1, 5)]
+    assert assistant._picks_until_my_turn() == 0
+
+
+def test_picks_until_my_turn_returns_none_without_total_rosters(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", [], ROSTER_POSITIONS, my_draft_slot=1)
+
+    assert assistant._picks_until_my_turn() is None
+
+
+def test_recommend_flags_scarcity_when_tier_wont_survive_to_next_turn(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [
+        _player("te_a", "TE", vorp=30, tier=1),
+        _player("te_b", "TE", vorp=25, tier=1),
+    ]
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=4, total_rosters=4
+    )
+
+    rec = assistant.recommend()
+
+    assert any("Scarcity" in r and "2 Tier 1 TE" in r for r in rec.reasons)
 
 
 def test_recommend_flags_bye_week_collision(tmp_path):

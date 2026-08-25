@@ -115,6 +115,7 @@ def cmd_draft(args):
         draft_slot,
         board_degraded=projections.degraded,
         consensus_top10=consensus_top10,
+        total_rosters=total_rosters,
     )
 
     print(f"Draft assistant started for draft {args.draft_id} "
