@@ -27,6 +27,26 @@ def fetch_league(client: SleeperClient, cache: Cache, league_id: str):
     return data, False, fetched_at
 
 
+def fetch_draft(client: SleeperClient, cache: Cache, draft_id: str):
+    """Fetch a draft's metadata (status, settings, draft_order) live; on
+    failure, fall back to the last cached copy (PRD R3). Returns
+    (data, stale, fetched_at). Raises SleeperAPIError only if the live fetch
+    fails AND nothing is cached."""
+    key = f"draft:{draft_id}"
+
+    try:
+        data = client.get_draft(draft_id)
+    except SleeperAPIError:
+        cached = cache.get(key)
+        if cached is None:
+            raise
+        payload, fetched_at = cached
+        return payload, True, fetched_at
+
+    fetched_at = cache.set(key, data)
+    return data, False, fetched_at
+
+
 def fetch_players(client: SleeperClient, cache: Cache, max_age_hours: int = PLAYER_DICT_MAX_AGE_HOURS):
     """Fetch the full player dictionary under a "serve from cache if still
     fresh" policy (PRD 3.1: pull at most once daily) -- unlike fetch_league,

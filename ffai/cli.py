@@ -13,6 +13,7 @@ from ffai.models import TradeParty
 from ffai.player_pool import is_draftable, to_projection_pool
 from ffai.projections import ProjectionsAdapter
 from ffai.repository import (
+    fetch_draft,
     fetch_league,
     fetch_nfl_state,
     fetch_players,
@@ -40,10 +41,42 @@ from ffai.waivers import (
 from ffai.weekly_context import gather_weekly_context
 
 
+def resolve_draft_slot(client, cache, draft_id, username):
+    """Auto-detect the user's draft_slot from the draft's own draft_order
+    (Sleeper user_id -> slot), keyed by the configured Sleeper username.
+    Returns the slot as a string, or None if it can't be determined (order
+    not yet set by the commissioner, or this user isn't in it) -- callers
+    must fail loudly rather than guess (PRD anti-goal: confidently wrong)."""
+    draft, _stale, _fetched_at = fetch_draft(client, cache, draft_id)
+    draft_order = draft.get("draft_order")
+    if not draft_order:
+        return None
+
+    user, _stale, _fetched_at = fetch_user(client, cache, username)
+    user_id = user.get("user_id")
+    if user_id is None:
+        return None
+
+    slot = draft_order.get(str(user_id))
+    return str(slot) if slot is not None else None
+
+
 def cmd_draft(args):
     client = SleeperClient()
     cache = Cache(db_path=CACHE_DB_PATH)
     adapter = ProjectionsAdapter()
+
+    draft_slot = args.draft_slot
+    if draft_slot is None:
+        draft_slot = resolve_draft_slot(client, cache, args.draft_id, SLEEPER_USERNAME)
+        if draft_slot is None:
+            print(
+                "ERROR: could not auto-detect your draft_slot (draft_order not set yet, "
+                "or your Sleeper username isn't in this draft). Pass it explicitly: "
+                "ffai draft <draft_id> <draft_slot>"
+            )
+            return 1
+        print(f"Auto-detected draft_slot {draft_slot} for {SLEEPER_USERNAME}")
 
     league, league_stale, _ = fetch_league(client, cache, args.league_id)
     if league_stale:
@@ -79,7 +112,7 @@ def cmd_draft(args):
         args.draft_id,
         board,
         roster_positions,
-        args.draft_slot,
+        draft_slot,
         board_degraded=projections.degraded,
         consensus_top10=consensus_top10,
     )
@@ -362,7 +395,11 @@ def build_parser():
 
     draft_parser = subparsers.add_parser("draft", help="Live draft assistant")
     draft_parser.add_argument("draft_id", help="Sleeper draft_id to monitor")
-    draft_parser.add_argument("draft_slot", help="Your draft_slot (draft position, 1-N) within this draft")
+    draft_parser.add_argument(
+        "draft_slot", nargs="?", default=None,
+        help="Your draft_slot (draft position, 1-N) within this draft. "
+             "If omitted, auto-detected from the draft's draft_order + your configured Sleeper username.",
+    )
     draft_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
     draft_parser.set_defaults(func=cmd_draft)
 

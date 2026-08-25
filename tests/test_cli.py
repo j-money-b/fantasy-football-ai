@@ -1,5 +1,7 @@
-from ffai.cli import build_parser
+from ffai.cache import Cache
+from ffai.cli import build_parser, resolve_draft_slot
 from ffai.config import LEAGUE_ID
+from ffai.sleeper_client import SleeperAPIError
 
 
 def test_draft_subcommand_parses_required_args():
@@ -19,6 +21,68 @@ def test_draft_subcommand_accepts_league_id_override():
     args = parser.parse_args(["draft", "draft123", "5", "--league-id", "999"])
 
     assert args.league_id == "999"
+
+
+def test_draft_subcommand_slot_is_optional():
+    parser = build_parser()
+
+    args = parser.parse_args(["draft", "draft123"])
+
+    assert args.draft_id == "draft123"
+    assert args.draft_slot is None
+
+
+class FakeClient:
+    def __init__(self, draft_data=None, user_data=None, raises=False):
+        self.draft_data = draft_data
+        self.user_data = user_data
+        self.raises = raises
+
+    def get_draft(self, draft_id):
+        if self.raises:
+            raise SleeperAPIError("simulated failure")
+        return self.draft_data
+
+    def get_user(self, username):
+        if self.raises:
+            raise SleeperAPIError("simulated failure")
+        return self.user_data
+
+
+def test_resolve_draft_slot_finds_slot_from_draft_order(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    client = FakeClient(
+        draft_data={"draft_order": {"999888777": 4}},
+        user_data={"user_id": "999888777"},
+    )
+
+    slot = resolve_draft_slot(client, cache, "draft123", "kevinkissedpeter")
+
+    assert slot == "4"
+
+
+def test_resolve_draft_slot_returns_none_when_order_not_set(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    client = FakeClient(
+        draft_data={"draft_order": None},
+        user_data={"user_id": "999888777"},
+    )
+
+    slot = resolve_draft_slot(client, cache, "draft123", "kevinkissedpeter")
+
+    assert slot is None
+
+
+def test_resolve_draft_slot_returns_none_when_user_not_in_order(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    client = FakeClient(
+        draft_data={"draft_order": {"someone_else": 7}},
+        user_data={"user_id": "999888777"},
+    )
+
+    slot = resolve_draft_slot(client, cache, "draft123", "kevinkissedpeter")
+
+    assert slot is None
 
 
 def test_startsit_subcommand_defaults():
