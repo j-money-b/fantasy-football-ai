@@ -118,19 +118,36 @@ def build_tiers(players, gap_multiplier=2.0):
     all_tiers = []
     for position_players in by_position.values():
         ordered = sorted(position_players, key=lambda p: p.vorp, reverse=True)
-        gaps = [ordered[i].vorp - ordered[i + 1].vorp for i in range(len(ordered) - 1)]
-        threshold = statistics.median(gaps) * gap_multiplier if gaps else 0.0
 
-        current = [ordered[0]]
+        # Only players above replacement get real tiers. Clustering the
+        # whole position produced absurdities like "Tier 32 at RB" -- a
+        # long tail of near-identical below-replacement players generates
+        # dozens of meaningless 1-2 player tiers, which made both the
+        # displayed tier and anything keyed off it (scarcity messaging,
+        # consensus-alternative matching) noise. Everyone at or below
+        # replacement is genuinely interchangeable, so they share one
+        # final bucket.
+        valuable = [p for p in ordered if p.vorp > 0]
+        replacement_level = [p for p in ordered if p.vorp <= 0]
+
         tier_number = 1
-        for i in range(1, len(ordered)):
-            gap = ordered[i - 1].vorp - ordered[i].vorp
-            if threshold > 0 and gap > threshold:
-                all_tiers.append(_finalize_tier(tier_number, current))
-                tier_number += 1
-                current = []
-            current.append(ordered[i])
-        all_tiers.append(_finalize_tier(tier_number, current))
+        if valuable:
+            gaps = [valuable[i].vorp - valuable[i + 1].vorp for i in range(len(valuable) - 1)]
+            threshold = statistics.median(gaps) * gap_multiplier if gaps else 0.0
+
+            current = [valuable[0]]
+            for i in range(1, len(valuable)):
+                gap = valuable[i - 1].vorp - valuable[i].vorp
+                if threshold > 0 and gap > threshold:
+                    all_tiers.append(_finalize_tier(tier_number, current))
+                    tier_number += 1
+                    current = []
+                current.append(valuable[i])
+            all_tiers.append(_finalize_tier(tier_number, current))
+            tier_number += 1
+
+        if replacement_level:
+            all_tiers.append(_finalize_tier(tier_number, replacement_level))
 
     return all_tiers
 

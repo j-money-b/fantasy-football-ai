@@ -112,7 +112,7 @@ def test_recommend_picks_best_marginal_value_with_tier_reasoning(tmp_path):
 
     assert rec.player.player_id == "a"
     assert rec.degraded is False
-    assert any("add 20.0 pts" in r for r in rec.reasons)
+    assert any("adds 20.0 pts" in r for r in rec.reasons)
     assert any("Tier 1" in r for r in rec.reasons)
     assert any("no RB rostered yet" in r for r in rec.reasons)
 
@@ -149,7 +149,7 @@ def test_recommend_healthy_stops_chasing_a_filled_position(tmp_path):
     rec = assistant.recommend()
 
     assert rec.player.player_id == "k1"
-    assert any("add 9.0 pts" in r for r in rec.reasons)
+    assert any("adds 9.0 pts" in r for r in rec.reasons)
 
 
 def test_recommend_healthy_falls_back_to_vorp_once_lineup_is_full(tmp_path):
@@ -182,28 +182,41 @@ def test_recommend_healthy_falls_back_to_vorp_once_lineup_is_full(tmp_path):
     assert any("Wouldn't crack your starting lineup" in r for r in rec.reasons)
 
 
-def test_recommend_prioritizes_real_cliff_over_higher_raw_vorp_in_deep_position(tmp_path):
-    """Regression for a real mock draft: raw VORP is a static snapshot and
-    doesn't know a position is about to crater before your next turn. Two
-    positions here both pass the marginal-value gate (both fill genuinely
-    open slots) -- RB has a real cliff (10/9/8 then a crater to -30/-35),
-    WR is deep and just declines smoothly (15/14/13/12/11). Raw VORP alone
-    picks the top WR (15 > 10); grabbing the RB now because its whole tier
-    is about to vanish is the correct call, so cliff-adjustment should flip
-    the ranking."""
+def _vorp_player(player_id, position, points, vorp, tier=1):
+    return PlayerVorp(
+        player_id=player_id, name=player_id, position=position, team="XXX",
+        bye_week=None, points=points, data_source="sleeper", vorp=vorp, tier=tier,
+    )
+
+
+def test_recommend_prioritizes_position_being_drafted_out_from_under_you(tmp_path):
+    """Regression for two real mock drafts that left replacement-level RBs
+    starting. RB and WR both have open slots here and WR grades higher on
+    static value (VORP 15 vs 10), so ranking by VORP takes the WR -- but
+    the draft itself shows RBs coming off the board far faster than WRs,
+    and the RB pool craters right after the top few while WR stays deep.
+    The tool has to notice that from the live pick feed and take the RB."""
     cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
-    board = (
-        [_player(f"rb{i}", "RB", vorp=v, tier=1 if v > 0 else 2) for i, v in enumerate([10, 9, 8, -30, -35])]
-        + [_player(f"wr{i}", "WR", vorp=v, tier=1) for i, v in enumerate([15, 14, 13, 12, 11])]
-    )
+    rbs = [_vorp_player(f"rb{i}", "RB", points=200 - i, vorp=10 - i) for i in range(10)]
+    rbs += [_vorp_player(f"rb_cliff{i}", "RB", points=160 - i, vorp=-30 - i, tier=2) for i in range(10)]
+    wrs = [_vorp_player(f"wr{i}", "WR", points=205 - i, vorp=15 - i) for i in range(20)]
+    board = rbs + wrs
+
+    # 21 picks in, 15 of them RB -- an unmistakable run on the position.
+    taken = [f"rb_gone{i}" for i in range(15)] + [f"wr_gone{i}" for i in range(6)]
+    board += [_vorp_player(pid, "RB" if pid.startswith("rb") else "WR", points=1, vorp=-99, tier=2) for pid in taken]
+    picks = [_pick(i + 1, pid, draft_slot=(i % 10) + 1) for i, pid in enumerate(taken)]
+
     assistant = DraftAssistant(
-        FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=4, total_rosters=4
+        FakeDraftClient([picks]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1, total_rosters=10
     )
+    assistant.poll_once()
 
     rec = assistant.recommend()
 
     assert rec.player.position == "RB"
-    assert rec.player.vorp == 10
+    assert rec.player.player_id == "rb0"
+    assert any("Cost of waiting" in r for r in rec.reasons)
 
 
 def test_recommend_never_boosts_a_below_replacement_player(tmp_path):
@@ -330,19 +343,59 @@ def test_picks_until_my_turn_returns_none_without_total_rosters(tmp_path):
     assert assistant._picks_until_my_turn() is None
 
 
-def test_recommend_flags_scarcity_when_tier_wont_survive_to_next_turn(tmp_path):
+def test_recommend_explains_the_cost_of_waiting(tmp_path):
+    """The reasoning has to name what waiting actually costs -- which
+    player you'd likely be left with, and how much worse they are."""
     cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    rbs = [_vorp_player(f"rb{i}", "RB", points=200 - i * 12, vorp=30 - i * 12) for i in range(8)]
+    wrs = [_vorp_player(f"wr{i}", "WR", points=190 - i, vorp=20 - i) for i in range(8)]
+    taken = [f"gone{i}" for i in range(15)]
+    board = rbs + wrs + [_vorp_player(pid, "RB", points=1, vorp=-99, tier=2) for pid in taken]
+    picks = [_pick(i + 1, pid, draft_slot=(i % 10) + 1) for i, pid in enumerate(taken)]
+
+    assistant = DraftAssistant(
+        FakeDraftClient([picks]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1, total_rosters=10
+    )
+    assistant.poll_once()
+
+    rec = assistant.recommend()
+
+    assert any("Cost of waiting" in r for r in rec.reasons)
+
+
+def test_recommend_never_stacks_a_second_defense_in_bench_rounds(tmp_path):
+    """Regression for a real mock draft that ended with four defenses. With
+    every starting slot full, marginal lineup value is 0 for everyone, so
+    ranking falls through to raw VORP -- where DEF screens deceptively well
+    because its replacement level comes off a very thin pool. A backup DEF
+    is worthless when the waiver wire refills the position weekly, so once
+    the DEF slot is covered another one must never be recommended over a
+    real skill-position bench player."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    starters = [
+        _vorp_player("qb", "QB", points=300, vorp=50),
+        _vorp_player("rb1", "RB", points=200, vorp=50),
+        _vorp_player("rb2", "RB", points=200, vorp=50),
+        _vorp_player("wr1", "WR", points=200, vorp=50),
+        _vorp_player("wr2", "WR", points=200, vorp=50),
+        _vorp_player("te", "TE", points=200, vorp=50),
+        _vorp_player("flex1", "RB", points=200, vorp=50),
+        _vorp_player("flex2", "WR", points=200, vorp=50),
+        _vorp_player("k", "K", points=100, vorp=5),
+        _vorp_player("def", "DEF", points=110, vorp=20),
+    ]
     board = [
-        _player("te_a", "TE", vorp=30, tier=1),
-        _player("te_b", "TE", vorp=25, tier=1),
+        _vorp_player("def2", "DEF", points=105, vorp=16),
+        _vorp_player("rb_depth", "RB", points=150, vorp=-20),
     ]
     assistant = DraftAssistant(
         FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=4, total_rosters=4
     )
+    assistant.my_drafted_players = starters
 
     rec = assistant.recommend()
 
-    assert any("Scarcity" in r and "2 Tier 1 TE" in r for r in rec.reasons)
+    assert rec.player.player_id == "rb_depth"
 
 
 def test_recommend_flags_bye_week_collision(tmp_path):

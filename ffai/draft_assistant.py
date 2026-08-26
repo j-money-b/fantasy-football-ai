@@ -5,12 +5,25 @@ from ffai.lineup import optimize_lineup
 from ffai.models import Recommendation
 from ffai.repository import fetch_draft_picks
 from ffai.sleeper_client import SleeperAPIError
-from ffai.vorp import DEDICATED_POSITIONS
+from ffai.vorp import DEDICATED_POSITIONS, FLEX_ELIGIBILITY
 
 logger = logging.getLogger(__name__)
 
 POSITIONAL_RUN_WINDOW = 5
 POSITIONAL_RUN_THRESHOLD = 3
+
+# Pseudo-picks of _slot_share_prior mixed into the observed positional
+# draft rates, so early picks aren't ruled by a 3-pick sample.
+POSITION_RATE_PRIOR_WEIGHT = 10
+
+# Positions where a backup has essentially no draft value because the
+# waiver wire refills them week to week -- once the starting slots are
+# covered, another one is a wasted pick. Without this the tool stacked
+# four defenses in the late rounds of a real mock draft: with every
+# starting slot full, marginal lineup value is 0 for everyone, so ranking
+# fell through to raw VORP, and DEF/K screen deceptively well there
+# (their replacement level is computed off a very thin pool).
+STREAMABLE_POSITIONS = {"DEF", "K"}
 
 
 class DraftAssistant:
@@ -134,42 +147,157 @@ class DraftAssistant:
         filled_counts = Counter(p.position for p in self.my_drafted_players)
         return {pos for pos, count in slot_counts.items() if filled_counts[pos] < count}
 
-    def _position_floor_vorp(self, same_position_ranked, picks_until):
-        """The VORP of the worst-case player still available at this
-        position by the time it's your next turn, assuming `picks_until`
-        other teams each grab one first -- a property of the POSITION as a
-        whole, not of any individual candidate (that matters: computing a
-        "what's behind ME specifically" floor per-candidate isn't
-        monotonic -- the 2nd-best player in a tier can look behind a
-        deeper, more-negative floor than the 1st-best one and end up with
-        a bigger bonus, which would rank a clearly-worse player above a
-        clearly-better one at the same position). 0.0 if the position
-        could be completely exhausted by then."""
+    def _slot_share_prior(self):
+        """Each position's share of the league's STARTING slots, with
+        flex-type slots split evenly across the positions they accept.
+        Used only to seed _position_draft_rates before a draft has enough
+        picks to speak for itself."""
+        shares = Counter()
+        for slot in self.roster_positions:
+            if slot in DEDICATED_POSITIONS:
+                shares[slot] += 1.0
+            elif slot in FLEX_ELIGIBILITY:
+                eligible = FLEX_ELIGIBILITY[slot]
+                for position in eligible:
+                    shares[position] += 1.0 / len(eligible)
+        total = sum(shares.values())
+        return {position: share / total for position, share in shares.items()} if total else {}
+
+    def _position_draft_rates(self):
+        """What fraction of picks each position is actually absorbing in
+        THIS draft, smoothed toward _slot_share_prior so the first few
+        picks aren't ruled by a tiny sample.
+
+        This is the signal the tool was missing entirely, and it's why a
+        real mock draft ended with two replacement-level RBs starting: RBs
+        came off the board roughly three times faster than the roster's
+        starting-slot mix implies (48 of the first 146 picks), so by the
+        4th round the usable RB supply was nearly gone while the WR/TE
+        classes this board liked were still deep. Nothing in a static VORP
+        number can see that happening -- it has to be measured live."""
+        counts = Counter()
+        for pick in self.picks:
+            player = self._by_player_id.get(pick.get("player_id"))
+            if player:
+                counts[player.position] += 1
+
+        prior = self._slot_share_prior()
+        total = sum(counts.values()) + POSITION_RATE_PRIOR_WEIGHT
+        return {
+            position: (counts[position] + POSITION_RATE_PRIOR_WEIGHT * prior.get(position, 0.0)) / total
+            for position in set(prior) | set(counts)
+        }
+
+    def _expected_taken_by_next_turn(self, position, picks_until, rates):
         if picks_until is None:
-            return None
-        return same_position_ranked[picks_until].vorp if picks_until < len(same_position_ranked) else 0.0
+            return 0
+        return int(round(picks_until * rates.get(position, 0.0)))
 
-    def _cliff_adjusted_vorp(self, player, floor_vorp):
-        """player.vorp, boosted by how much value is at risk of vanishing
-        at this position before your next turn (see _position_floor_vorp).
-        A small, steady decline (e.g. mid-tier QB in a deep class) leaves
-        the floor close to the top of the position, so it earns a small
-        bonus; a real cliff (e.g. the last two usable RBs before a 30+
-        point crater) leaves a much lower floor and earns a big one --
-        deliberately NOT based on vorp.build_tiers' gap clustering, which
-        splits smoothly-declining positions (QB, WR) into many 1-2-player
-        tiers and made ordinary decline look like a cliff.
+    def _my_future_pick_offsets(self, picks_until):
+        """How many picks after this draft_slot's next turn each of its
+        LATER turns falls, e.g. [20, 27, 40, ...] in a snake. Empty when
+        the draft geometry isn't known (no total_rosters) or this is the
+        last turn -- callers treat that as "nothing left to plan"."""
+        if not self.total_rosters or picks_until is None:
+            return []
 
-        Restricted to player.vorp > 0 -- already-below-replacement players
-        never get an urgency boost. A deep bench tail (backup kickers
-        projected near zero points, e.g.) can pull the floor very negative,
-        producing a large bonus for a player nobody would actually reach
-        for; below replacement is below replacement no matter how much
-        worse the tail behind it gets."""
-        if floor_vorp is None or player.vorp <= 0:
-            return player.vorp
+        rounds = len(self.roster_positions)
+        last_pick = rounds * self.total_rosters
+        my_next = len(self.picks) + 1 + picks_until
+        my_slot = int(self.my_draft_slot)
 
-        return player.vorp + max(0.0, player.vorp - floor_vorp)
+        offsets = []
+        for pick_no in range(my_next + 1, last_pick + 1):
+            round_no = (pick_no - 1) // self.total_rosters + 1
+            pos_in_round = (pick_no - 1) % self.total_rosters + 1
+            slot = pos_in_round if round_no % 2 == 1 else self.total_rosters - pos_in_round + 1
+            if slot == my_slot:
+                offsets.append(pick_no - my_next)
+        return offsets
+
+    def _plan_value(self, first_choice, pools, rates, future_offsets):
+        """Projected total starting-lineup points of the roster you end the
+        draft with if you take `first_choice` now and then keep taking
+        whatever helps most at each of your remaining turns.
+
+        This is the whole point of the recommender, and getting here took
+        two wrong turns worth recording. Ranking by static value (VORP)
+        ignored that positions deplete at different speeds. Ranking by the
+        one-turn cost of waiting fixed nothing, because it's a greedy trap:
+        skipping RB costs almost nothing at ANY single turn (the next RB is
+        only a few points worse), so the tool deferred RB every round in
+        turn and ended a real mock draft starting two replacement-level
+        RBs. Only looking all the way to the end of the draft exposes that
+        -- the cost isn't in any one deferral, it's in the compounding.
+
+        The rollout is greedy per future turn, and the estimate of who'll
+        still be there uses _position_draft_rates, so this is an
+        approximation of the future, not a forecast of it. It doesn't need
+        to be exact: it only has to rank a handful of positions correctly
+        against each other right now."""
+        roster = list(self.my_drafted_players) + [first_choice]
+        taken_by_me = Counter({first_choice.position: 1})
+
+        for elapsed in future_offsets:
+            current = optimize_lineup(roster, self.roster_positions).total_points
+            best_candidate = None
+            best_gain = None
+            for position, players in pools.items():
+                index = self._expected_taken_by_next_turn(position, elapsed, rates) + taken_by_me[position]
+                if index >= len(players):
+                    continue
+                candidate = players[index]
+                gain = optimize_lineup(roster + [candidate], self.roster_positions).total_points - current
+                if best_gain is None or gain > best_gain:
+                    best_gain, best_candidate = gain, candidate
+            if best_candidate is None:
+                break
+            roster.append(best_candidate)
+            taken_by_me[best_candidate.position] += 1
+
+        return round(optimize_lineup(roster, self.roster_positions).total_points, 2)
+
+    def _depth_value(self, candidate, lineup):
+        """What the candidate would add to your lineup if your weakest
+        current starter at their position went down -- their value as the
+        first real backup there.
+
+        This is what separates a useful depth pick from a dead one once
+        every starting slot is full. It self-limits without any per-
+        position roster caps: your first backup at a position scores well
+        (nothing covers that slot if the starter is out), while a third or
+        fourth scores exactly 0, because the backup you already have would
+        step in ahead of them. A real mock draft ended with four TEs and
+        four defenses on the bench precisely because nothing measured
+        this -- with marginal value 0 across the board, ranking fell
+        through to raw VORP, which has no notion of redundancy."""
+        starters_at_position = [
+            slot.player for slot in lineup.slots
+            if slot.player is not None and slot.player.position == candidate.position
+        ]
+        if not starters_at_position:
+            return 0.0  # nobody starting there yet -- marginal value already covers that case
+
+        weakest = min(starters_at_position, key=lambda p: p.points)
+        without_weakest = [p for p in self.my_drafted_players if p.player_id != weakest.player_id]
+        before = optimize_lineup(without_weakest, self.roster_positions).total_points
+        after = optimize_lineup(without_weakest + [candidate], self.roster_positions).total_points
+        return round(after - before, 2)
+
+    def _draftable_candidates(self, available):
+        """Drops backups at STREAMABLE_POSITIONS once their starting slots
+        are covered -- a 2nd DEF/K is a wasted pick when the waiver wire
+        refills those weekly. Falls back to the unfiltered list if that
+        would leave nothing (deep into a draft where only DEF/K remain),
+        so this can never strand the recommender with no candidate."""
+        required = Counter(pos for pos in self.roster_positions if pos in STREAMABLE_POSITIONS)
+        mine = Counter(p.position for p in self.my_drafted_players)
+        covered = {pos for pos, count in required.items() if mine[pos] >= count}
+        if not covered:
+            return available
+
+        filtered = [p for p in available if p.position not in covered]
+        return filtered or available
 
     def _picks_until_my_turn(self):
         """Snake-draft distance, in picks, from right now until my
@@ -231,55 +359,78 @@ class DraftAssistant:
         return Recommendation(player=best, reasons=reasons, degraded=True, data_source=best.data_source)
 
     def _recommend_healthy(self, available):
-        baseline = optimize_lineup(self.my_drafted_players, self.roster_positions).total_points
-        scored = [
-            (p, round(optimize_lineup(self.my_drafted_players + [p], self.roster_positions).total_points - baseline, 2))
-            for p in available
-        ]
-        # Marginal value is used as a GATE ("does this player have any open
-        # roster slot to fill right now"), not as the ranking metric itself.
-        # Ranking directly by raw marginal points collapses to "always
-        # draft whichever position scores the most per game" -- QB,
-        # structurally, since it has no flex outlet and outscores every
-        # other position -- which is the exact same kind of positionally-
-        # blind runaway the original all-VORP bug had, just aimed at a
-        # different position (confirmed empirically: an earlier version of
-        # this ranked by raw marginal value alone and recommended QB for
-        # 10+ consecutive rounds). VORP already correctly weighs scarcity
-        # across the whole draft, not just this one roster -- it's what
-        # decides "best" among candidates that pass the open-slot gate.
+        # Every candidate is scored by COST OF WAITING: how much better it
+        # is to take this player now than to take the best player at his
+        # position that this draft_slot can still realistically expect at
+        # its next turn. Both halves are measured in marginal starting-
+        # lineup points (lineup.optimize_lineup), so they're directly
+        # comparable across positions and already account for which of
+        # your slots are open, flex included.
         #
-        # Raw VORP, though, is a static snapshot -- it doesn't know that a
-        # position is about to cliff off a ledge before your next turn. A
-        # real mock draft exposed this: with RB and WR slots both open, the
-        # tool kept taking WR (still a deep class, VORP in the 20s-30s for
-        # many more rounds) over the last two non-cliff RBs (VORP ~9-11,
-        # with every RB after them cratering to roughly -26 VORP) -- correct
-        # by raw-VORP-right-now, but exactly backwards for draft strategy,
-        # which says grab the scarce thing before the cliff and let the
-        # deep position wait. self._cliff_adjusted_vorp adds a bonus sized
-        # to how much value is at risk of vanishing at this player's own
-        # position before your next turn -- so a smoothly-declining, deep
-        # position (QB, WR here) barely moves and earns almost no bonus,
-        # while a real cliff (RB here) earns a big one, without needing to
-        # rely on vorp.build_tiers' gap clustering (which, applied to a
-        # smooth decline, splits it into many 1-2-player tiers and made
-        # ordinary decline look like a cliff during testing).
-        by_position = defaultdict(list)
-        for p in available:
-            by_position[p.position].append(p)
+        # This replaces ranking by VORP, which is a season-long valuation,
+        # not a draft-decision one. Two real mock drafts showed why that
+        # distinction matters: VORP happily kept spending early picks on a
+        # deep WR/TE class it rated highly while RBs -- a position with two
+        # mandatory starting slots -- were coming off the board three
+        # times faster, leaving replacement-level RBs starting. Cost of
+        # waiting sees that directly: if skipping a position costs you
+        # almost nothing because a near-equal player will still be there
+        # (deep WR class), it ranks low; if it costs you 40 points because
+        # the position is evaporating (RB), it ranks high.
+        #
+        # Also deliberately not raw marginal value, which collapses to
+        # "always draft the position that scores the most per game" -- QB,
+        # structurally, since it has no flex outlet (confirmed empirically:
+        # an earlier version ranked that way and recommended QB 10+ rounds
+        # straight). Subtracting the wait-value cancels that scale bias,
+        # because it's a within-position difference.
+        baseline = optimize_lineup(self.my_drafted_players, self.roster_positions).total_points
+
+        def marginal(player):
+            lineup = optimize_lineup(self.my_drafted_players + [player], self.roster_positions)
+            return round(lineup.total_points - baseline, 2)
+
+        candidates = self._draftable_candidates(available)
+        pools = defaultdict(list)
+        for p in candidates:
+            pools[p.position].append(p)
+
         picks_until = self._picks_until_my_turn()
-        floor_by_position = {
-            position: self._position_floor_vorp(players, picks_until) for position, players in by_position.items()
-        }
+        rates = self._position_draft_rates()
+        future_offsets = self._my_future_pick_offsets(picks_until)
 
-        def cliff_adjusted_vorp(player):
-            return self._cliff_adjusted_vorp(player, floor_by_position[player.position])
+        # Within a position you'd always take the better projection, so the
+        # only real decision at any pick is WHICH POSITION -- a handful of
+        # options, not hundreds of players. That's what makes it affordable
+        # to plan the entire rest of the draft for each one below.
+        #
+        # Positions that can neither improve your lineup now nor cover a
+        # starter going down are dropped outright: they're pure waste, and
+        # leaving them in is how a real mock draft ended up with four
+        # bench TEs (see _depth_value).
+        current_lineup = optimize_lineup(self.my_drafted_players, self.roster_positions)
+        options = [
+            players[0] for players in pools.values()
+            if marginal(players[0]) > 0 or self._depth_value(players[0], current_lineup) > 0
+        ]
+        if not options:
+            options = [players[0] for players in pools.values()]
 
-        scored.sort(key=lambda pair: (pair[1] > 0, cliff_adjusted_vorp(pair[0])), reverse=True)
+        if not future_offsets:
+            # Nothing left to plan against (draft geometry unknown, or this
+            # is the last pick): fill an open slot with the best talent.
+            scored = [(p, marginal(p)) for p in candidates]
+            scored.sort(key=lambda pair: (pair[1] > 0, pair[0].vorp), reverse=True)
+        else:
+            scored = [(p, self._plan_value(p, pools, rates, future_offsets)) for p in options]
+            # VORP breaks ties: when two positions project to the same final
+            # roster (common late, when you'll simply end up with both), take
+            # the better player now rather than betting on a projection of
+            # what will still be there later.
+            scored.sort(key=lambda pair: (pair[1], pair[0].vorp), reverse=True)
 
-        top_pick, top_marginal = scored[0]
-        best, best_marginal = top_pick, top_marginal
+        top_pick = scored[0][0]
+        best = top_pick
         reasons = []
 
         # Consensus dampening: don't fully trust our own board when it's a
@@ -299,15 +450,13 @@ class DraftAssistant:
         if not self._consensus_backed(top_pick) and top_pick.tier is not None:
             alt = next(
                 (
-                    pair for pair in scored
-                    if pair[0].position == top_pick.position
-                    and pair[0].tier == top_pick.tier
-                    and self._has_real_consensus_backing(pair[0])
+                    p for p in pools[top_pick.position]
+                    if p.tier == top_pick.tier and self._has_real_consensus_backing(p)
                 ),
                 None,
             )
-            if alt and alt[0].player_id != top_pick.player_id:
-                best, best_marginal = alt
+            if alt and alt.player_id != top_pick.player_id:
+                best = alt
                 reasons.append(
                     f"Preferred over {top_pick.name}: {top_pick.name} isn't in FantasyPros' consensus "
                     f"top 10 at {top_pick.position} (our own board is more of an outlier here than "
@@ -320,11 +469,12 @@ class DraftAssistant:
                     f"on our own single-source projection than usual."
                 )
 
+        best_marginal = marginal(best)
         if best_marginal > 0:
             reasons.insert(
                 0,
-                f"Best available by VORP ({best.vorp:+.1f}) among players with open roster capacity -- "
-                f"would add {best_marginal:.1f} pts to your lineup right now.",
+                f"Fills an open starting slot -- adds {best_marginal:.1f} pts to your lineup right now "
+                f"(VORP {best.vorp:+.1f}).",
             )
         else:
             reasons.insert(
@@ -336,15 +486,34 @@ class DraftAssistant:
         if best.tier is not None:
             reasons.append(f"Tier {best.tier} at {best.position}.")
 
-        picks_until = self._picks_until_my_turn()
-        if picks_until is not None and picks_until > 0:
-            same_tier_left = sum(1 for p in available if p.position == best.position and p.tier == best.tier)
-            if same_tier_left <= picks_until:
+        if future_offsets and len(scored) > 1:
+            runner_up, runner_up_value = scored[1]
+            edge = scored[0][1] - runner_up_value
+            if edge > 0:
                 reasons.append(
-                    f"Scarcity: only {same_tier_left} Tier {best.tier} {best.position}(s) left on the "
-                    f"board, and {picks_until} pick(s) happen before your next turn -- may not be there "
-                    f"if you wait."
+                    f"Playing out the rest of your draft from here, taking {best.position} now projects to "
+                    f"a {edge:.0f} pt better final lineup than going {runner_up.position} "
+                    f"({runner_up.name}) -- because of what's likely to still be there at your later picks, "
+                    f"not just who's best right now."
                 )
+
+        if picks_until:
+            expected_gone = self._expected_taken_by_next_turn(best.position, picks_until, rates)
+            same_position = pools[best.position]
+            if expected_gone >= len(same_position):
+                reasons.append(
+                    f"Cost of waiting: at the rate {best.position}s are coming off the board, the position "
+                    f"may be picked clean before your next turn ({picks_until} picks away)."
+                )
+            elif expected_gone > 0:
+                fallback = same_position[expected_gone]
+                drop = best.points - fallback.points
+                if drop > 0:
+                    reasons.append(
+                        f"Cost of waiting: ~{expected_gone} more {best.position}(s) should go in the "
+                        f"{picks_until} picks before your next turn, leaving {fallback.name} "
+                        f"({drop:.0f} pts worse) as the likely best available."
+                    )
 
         reasons.extend(self._shared_reasons(best))
         return Recommendation(player=best, reasons=reasons, degraded=False, data_source=best.data_source)
