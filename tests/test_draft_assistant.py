@@ -182,6 +182,76 @@ def test_recommend_healthy_falls_back_to_vorp_once_lineup_is_full(tmp_path):
     assert any("Wouldn't crack your starting lineup" in r for r in rec.reasons)
 
 
+def test_recommend_prioritizes_real_cliff_over_higher_raw_vorp_in_deep_position(tmp_path):
+    """Regression for a real mock draft: raw VORP is a static snapshot and
+    doesn't know a position is about to crater before your next turn. Two
+    positions here both pass the marginal-value gate (both fill genuinely
+    open slots) -- RB has a real cliff (10/9/8 then a crater to -30/-35),
+    WR is deep and just declines smoothly (15/14/13/12/11). Raw VORP alone
+    picks the top WR (15 > 10); grabbing the RB now because its whole tier
+    is about to vanish is the correct call, so cliff-adjustment should flip
+    the ranking."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = (
+        [_player(f"rb{i}", "RB", vorp=v, tier=1 if v > 0 else 2) for i, v in enumerate([10, 9, 8, -30, -35])]
+        + [_player(f"wr{i}", "WR", vorp=v, tier=1) for i, v in enumerate([15, 14, 13, 12, 11])]
+    )
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=4, total_rosters=4
+    )
+
+    rec = assistant.recommend()
+
+    assert rec.player.position == "RB"
+    assert rec.player.vorp == 10
+
+
+def test_recommend_never_boosts_a_below_replacement_player(tmp_path):
+    """Regression for a real mock draft: a kicker sitting below replacement
+    (negative VORP, but still enough raw points to pass the marginal-value
+    gate since the K slot was open) got boosted above a positive-VORP DEF,
+    because a deep bench tail of near-worthless kickers made the lookahead
+    land on an even more negative fallback -- producing a large "cliff"
+    bonus for a player nobody would ever actually reach for. Below
+    replacement must stay below replacement regardless of how much worse
+    the tail behind it gets."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [
+        PlayerVorp(player_id="k1", name="K1", position="K", team="AAA", bye_week=None, points=59, data_source="sleeper", vorp=-13, tier=1),
+        PlayerVorp(player_id="k2", name="K2", position="K", team="BBB", bye_week=None, points=50, data_source="sleeper", vorp=-22, tier=1),
+        PlayerVorp(player_id="k3", name="K3", position="K", team="CCC", bye_week=None, points=45, data_source="sleeper", vorp=-27, tier=1),
+        PlayerVorp(player_id="k4", name="K4", position="K", team="DDD", bye_week=None, points=1, data_source="sleeper", vorp=-71, tier=2),
+        PlayerVorp(player_id="def1", name="DEF1", position="DEF", team="EEE", bye_week=None, points=90, data_source="sleeper", vorp=18, tier=1),
+    ]
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=4, total_rosters=4
+    )
+
+    rec = assistant.recommend()
+
+    assert rec.player.player_id == "def1"
+
+
+def test_recommend_does_not_let_smooth_decline_look_like_a_cliff(tmp_path):
+    """Regression: a position that's just declining steadily (a deep QB
+    class) must not get boosted enough to leapfrog a clearly-better
+    candidate at another still-deep position (WR) -- only a REAL cliff (a
+    big drop, not merely being a few ranks further down) should be able to
+    flip the ranking."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = (
+        [_player(f"qb{i}", "QB", vorp=v, tier=i + 1) for i, v in enumerate([24, 20, 16, 12, 8, 4])]
+        + [_player(f"wr{i}", "WR", vorp=v, tier=1) for i, v in enumerate([33, 30, 27, 24, 21, 18])]
+    )
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=4, total_rosters=4
+    )
+
+    rec = assistant.recommend()
+
+    assert rec.player.position == "WR"
+
+
 def test_recommend_prefers_consensus_backed_alternative_in_same_tier(tmp_path):
     cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
     board = [

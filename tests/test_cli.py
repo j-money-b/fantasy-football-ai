@@ -1,7 +1,21 @@
+import subprocess
+
 from ffai.cache import Cache
-from ffai.cli import build_parser, resolve_draft_slot
+from ffai.cli import _sync_with_origin, build_parser, resolve_draft_slot
 from ffai.config import LEAGUE_ID
 from ffai.sleeper_client import SleeperAPIError
+
+
+def _init_repo(path):
+    subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=path, check=True)
+
+
+def _commit(path, content):
+    (path / "f.txt").write_text(content)
+    subprocess.run(["git", "add", "f.txt"], cwd=path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", content], cwd=path, check=True)
 
 
 def test_draft_subcommand_parses_required_args():
@@ -200,3 +214,57 @@ def test_no_command_raises_system_exit():
         assert False, "expected SystemExit for missing required subcommand"
     except SystemExit:
         pass
+
+
+def test_sync_with_origin_fast_forwards_when_behind(tmp_path):
+    """Regression for a real incident: a leftover terminal ran a live mock
+    draft on a checkout that was one commit behind a bug fix, with no
+    visible sign anything was stale. This is the exact scenario -- a clone
+    sitting behind its origin -- and it should self-heal by fast-forwarding."""
+    origin = tmp_path / "origin"
+    clone = tmp_path / "clone"
+    origin.mkdir()
+    _init_repo(origin)
+    _commit(origin, "v1")
+    subprocess.run(["git", "clone", "-q", str(origin), str(clone)], check=True)
+    _commit(origin, "v2 -- the fix")
+
+    result = _sync_with_origin(repo_root=clone)
+
+    assert result is True
+    assert (clone / "f.txt").read_text() == "v2 -- the fix"
+
+
+def test_sync_with_origin_noop_when_already_current(tmp_path):
+    origin = tmp_path / "origin"
+    clone = tmp_path / "clone"
+    origin.mkdir()
+    _init_repo(origin)
+    _commit(origin, "v1")
+    subprocess.run(["git", "clone", "-q", str(origin), str(clone)], check=True)
+
+    assert _sync_with_origin(repo_root=clone) is False
+
+
+def test_sync_with_origin_warns_instead_of_guessing_when_diverged(tmp_path, capsys):
+    """If the local checkout has its own commit origin doesn't have, a
+    fast-forward isn't possible -- must warn rather than silently merge or
+    discard anything."""
+    origin = tmp_path / "origin"
+    clone = tmp_path / "clone"
+    origin.mkdir()
+    _init_repo(origin)
+    _commit(origin, "v1")
+    subprocess.run(["git", "clone", "-q", str(origin), str(clone)], check=True)
+    _commit(origin, "v2 -- the fix")
+    _commit(clone, "a local commit origin doesn't have")
+
+    result = _sync_with_origin(repo_root=clone)
+
+    assert result is False
+    assert (clone / "f.txt").read_text() == "a local commit origin doesn't have"
+    assert "WARNING" in capsys.readouterr().out
+
+
+def test_sync_with_origin_returns_false_when_not_a_git_repo(tmp_path):
+    assert _sync_with_origin(repo_root=tmp_path) is False

@@ -100,3 +100,27 @@ def test_build_tiers_no_big_gaps_produces_single_tier():
 
 def test_build_tiers_empty_list():
     assert build_tiers([]) == []
+
+
+def test_build_tiers_computes_independently_per_position():
+    """A position with small, steady gaps must get its own tier boundaries
+    judged against its OWN gap distribution -- not have its threshold set
+    by a totally different position's much bigger gaps. Previously
+    build_tiers clustered the whole board together, so a real internal
+    break in a thin position (DEF here) got swallowed into one bucket by
+    RB's huge top-of-board gaps (confirmed: computed globally, this exact
+    input produces a single DEF tier instead of two)."""
+    def _vorp_player(player_id, position, vorp):
+        return PlayerVorp(
+            player_id=player_id, name=player_id, position=position, team="XXX",
+            bye_week=None, points=vorp, data_source="test", vorp=vorp,
+        )
+
+    rb_players = [_vorp_player(f"rb{i}", "RB", v) for i, v in enumerate([100, 80, 60])]
+    def_players = [_vorp_player(f"def{i}", "DEF", v) for i, v in enumerate([10, 8, 2, 1])]
+
+    build_tiers(rb_players + def_players)
+
+    assert def_players[0].tier == def_players[1].tier
+    assert def_players[2].tier == def_players[3].tier
+    assert def_players[0].tier != def_players[2].tier

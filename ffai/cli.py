@@ -1,4 +1,6 @@
 import argparse
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -445,7 +447,56 @@ def build_parser():
     return parser
 
 
+def _sync_with_origin(repo_root=None):
+    """Best-effort: fast-forward this checkout to origin's tip and report
+    whether it moved. Fixed a real incident where a leftover terminal from
+    a prior session ran a live mock draft one commit behind a bug fix, with
+    no visible sign the code was stale -- `git status` alone doesn't catch
+    this if origin has moved since the last `git fetch`. Every git call is
+    timeout-bounded and any failure (offline, not a repo, git missing)
+    degrades to doing nothing -- must never block a real draft over a
+    network hiccup. Only ever fast-forwards (never touches uncommitted
+    work, never merges); if that's not possible (diverged, local edits in
+    the way), it warns instead of guessing."""
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
+    try:
+        run = lambda *args: subprocess.run(  # noqa: E731
+            ["git", *args], cwd=repo_root, capture_output=True, text=True, timeout=5,
+        )
+        branch = run("rev-parse", "--abbrev-ref", "HEAD")
+        if branch.returncode != 0:
+            return False
+        branch = branch.stdout.strip()
+
+        if run("fetch", "origin", branch, "--quiet").returncode != 0:
+            return False
+
+        local = run("rev-parse", "HEAD").stdout.strip()
+        remote = run("rev-parse", f"origin/{branch}").stdout.strip()
+        if not local or not remote or local == remote:
+            return False
+
+        behind = run("rev-list", "--count", f"{local}..{remote}").stdout.strip()
+        pulled = run("merge", "--ff-only", f"origin/{branch}")
+        if pulled.returncode == 0:
+            print(f"Pulled {behind} commit(s) from origin/{branch} -- restarting with the updated code...")
+            return True
+
+        print(
+            f"WARNING: this checkout is {behind} commit(s) behind origin/{branch} and couldn't be "
+            f"fast-forwarded automatically (local changes in the way?) -- you may be running stale "
+            f"code. Run 'git status' by hand before trusting recommendations."
+        )
+        return False
+    except Exception:
+        return False
+
+
 def main(argv=None):
+    if _sync_with_origin():
+        os.execv(sys.executable, [sys.executable, "-m", "ffai.cli"] + sys.argv[1:])
+
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)

@@ -1,5 +1,5 @@
 import logging
-from collections import Counter
+from collections import Counter, defaultdict
 
 from ffai.lineup import optimize_lineup
 from ffai.models import Recommendation
@@ -134,6 +134,43 @@ class DraftAssistant:
         filled_counts = Counter(p.position for p in self.my_drafted_players)
         return {pos for pos, count in slot_counts.items() if filled_counts[pos] < count}
 
+    def _position_floor_vorp(self, same_position_ranked, picks_until):
+        """The VORP of the worst-case player still available at this
+        position by the time it's your next turn, assuming `picks_until`
+        other teams each grab one first -- a property of the POSITION as a
+        whole, not of any individual candidate (that matters: computing a
+        "what's behind ME specifically" floor per-candidate isn't
+        monotonic -- the 2nd-best player in a tier can look behind a
+        deeper, more-negative floor than the 1st-best one and end up with
+        a bigger bonus, which would rank a clearly-worse player above a
+        clearly-better one at the same position). 0.0 if the position
+        could be completely exhausted by then."""
+        if picks_until is None:
+            return None
+        return same_position_ranked[picks_until].vorp if picks_until < len(same_position_ranked) else 0.0
+
+    def _cliff_adjusted_vorp(self, player, floor_vorp):
+        """player.vorp, boosted by how much value is at risk of vanishing
+        at this position before your next turn (see _position_floor_vorp).
+        A small, steady decline (e.g. mid-tier QB in a deep class) leaves
+        the floor close to the top of the position, so it earns a small
+        bonus; a real cliff (e.g. the last two usable RBs before a 30+
+        point crater) leaves a much lower floor and earns a big one --
+        deliberately NOT based on vorp.build_tiers' gap clustering, which
+        splits smoothly-declining positions (QB, WR) into many 1-2-player
+        tiers and made ordinary decline look like a cliff.
+
+        Restricted to player.vorp > 0 -- already-below-replacement players
+        never get an urgency boost. A deep bench tail (backup kickers
+        projected near zero points, e.g.) can pull the floor very negative,
+        producing a large bonus for a player nobody would actually reach
+        for; below replacement is below replacement no matter how much
+        worse the tail behind it gets."""
+        if floor_vorp is None or player.vorp <= 0:
+            return player.vorp
+
+        return player.vorp + max(0.0, player.vorp - floor_vorp)
+
     def _picks_until_my_turn(self):
         """Snake-draft distance, in picks, from right now until my
         draft_slot is next on the clock. Returns None if total_rosters
@@ -210,10 +247,36 @@ class DraftAssistant:
         # this ranked by raw marginal value alone and recommended QB for
         # 10+ consecutive rounds). VORP already correctly weighs scarcity
         # across the whole draft, not just this one roster -- it's what
-        # decides "best" among candidates that pass the open-slot gate, and
-        # it's the sole ranking signal once nobody has an open slot left
-        # (bench rounds, where the gate is False for everyone).
-        scored.sort(key=lambda pair: (pair[1] > 0, pair[0].vorp), reverse=True)
+        # decides "best" among candidates that pass the open-slot gate.
+        #
+        # Raw VORP, though, is a static snapshot -- it doesn't know that a
+        # position is about to cliff off a ledge before your next turn. A
+        # real mock draft exposed this: with RB and WR slots both open, the
+        # tool kept taking WR (still a deep class, VORP in the 20s-30s for
+        # many more rounds) over the last two non-cliff RBs (VORP ~9-11,
+        # with every RB after them cratering to roughly -26 VORP) -- correct
+        # by raw-VORP-right-now, but exactly backwards for draft strategy,
+        # which says grab the scarce thing before the cliff and let the
+        # deep position wait. self._cliff_adjusted_vorp adds a bonus sized
+        # to how much value is at risk of vanishing at this player's own
+        # position before your next turn -- so a smoothly-declining, deep
+        # position (QB, WR here) barely moves and earns almost no bonus,
+        # while a real cliff (RB here) earns a big one, without needing to
+        # rely on vorp.build_tiers' gap clustering (which, applied to a
+        # smooth decline, splits it into many 1-2-player tiers and made
+        # ordinary decline look like a cliff during testing).
+        by_position = defaultdict(list)
+        for p in available:
+            by_position[p.position].append(p)
+        picks_until = self._picks_until_my_turn()
+        floor_by_position = {
+            position: self._position_floor_vorp(players, picks_until) for position, players in by_position.items()
+        }
+
+        def cliff_adjusted_vorp(player):
+            return self._cliff_adjusted_vorp(player, floor_by_position[player.position])
+
+        scored.sort(key=lambda pair: (pair[1] > 0, cliff_adjusted_vorp(pair[0])), reverse=True)
 
         top_pick, top_marginal = scored[0]
         best, best_marginal = top_pick, top_marginal

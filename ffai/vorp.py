@@ -96,31 +96,43 @@ def compute_vorp(ranked_players, replacement_levels):
 
 
 def build_tiers(players, gap_multiplier=2.0):
-    """Gap-based 1D clustering on VORP: sort descending, start a new tier
-    whenever a consecutive gap exceeds median(gaps) * gap_multiplier. Median
-    (not mean) because fantasy-value distributions are right-skewed -- a few
-    huge gaps (e.g. elite RB1s vs. the pack) would blow out a mean-based
-    threshold. Mutates each player's .tier in place and returns the Tier
-    groupings."""
+    """Gap-based 1D clustering on VORP, computed SEPARATELY within each
+    position -- VORP scale differs wildly by position (RB/WR spread over
+    100+ points; DEF/K over single digits), so a single global gap
+    threshold would be set by whichever position has the biggest gaps
+    (RB/WR) and would swallow DEF/K's own real cliffs into one
+    catch-all bottom tier, and would blur genuine same-position cliffs
+    that in-draft scarcity decisions depend on (DraftAssistant.
+    _recommend_healthy's cliff-urgency bonus needs same-position,
+    same-tier comparisons to mean something). Mutates each player's .tier
+    in place -- numbering restarts at 1 within each position -- and
+    returns all tier groupings across every position (order across
+    positions not guaranteed)."""
     if not players:
         return []
 
-    ordered = sorted(players, key=lambda p: p.vorp, reverse=True)
-    gaps = [ordered[i].vorp - ordered[i + 1].vorp for i in range(len(ordered) - 1)]
-    threshold = statistics.median(gaps) * gap_multiplier if gaps else 0.0
+    by_position = defaultdict(list)
+    for p in players:
+        by_position[p.position].append(p)
 
-    tiers = []
-    current = [ordered[0]]
-    tier_number = 1
-    for i in range(1, len(ordered)):
-        gap = ordered[i - 1].vorp - ordered[i].vorp
-        if threshold > 0 and gap > threshold:
-            tiers.append(_finalize_tier(tier_number, current))
-            tier_number += 1
-            current = []
-        current.append(ordered[i])
-    tiers.append(_finalize_tier(tier_number, current))
-    return tiers
+    all_tiers = []
+    for position_players in by_position.values():
+        ordered = sorted(position_players, key=lambda p: p.vorp, reverse=True)
+        gaps = [ordered[i].vorp - ordered[i + 1].vorp for i in range(len(ordered) - 1)]
+        threshold = statistics.median(gaps) * gap_multiplier if gaps else 0.0
+
+        current = [ordered[0]]
+        tier_number = 1
+        for i in range(1, len(ordered)):
+            gap = ordered[i - 1].vorp - ordered[i].vorp
+            if threshold > 0 and gap > threshold:
+                all_tiers.append(_finalize_tier(tier_number, current))
+                tier_number += 1
+                current = []
+            current.append(ordered[i])
+        all_tiers.append(_finalize_tier(tier_number, current))
+
+    return all_tiers
 
 
 def _finalize_tier(tier_number, players):
