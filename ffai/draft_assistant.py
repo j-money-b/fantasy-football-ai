@@ -43,6 +43,26 @@ NOISE_BAND_POINTS = NOISE_POINTS_PER_GAME * FANTASY_SEASON_GAMES
 # How many tied alternatives to name before summarising the rest.
 MAX_NAMED_TIED_ALTERNATIVES = 3
 
+# Roughly the share of a season a starter at each position misses, from
+# typical NFL games-missed rates (RB ~3.5 games of 17, WR/TE ~2.5, QB ~2,
+# K ~0.5). DEF is 0: a team defense is a unit, it is never "out".
+#
+# These drive _roster_value, which is what finally gives the late rounds
+# something to optimise. Scoring a roster purely on its healthy starting
+# lineup makes every bench pick worth EXACTLY 0, so from about round 8 on
+# the objective went flat (measured: 1805 vs 1807 across every position)
+# and the tool spent real picks on a kicker or a 4th TE to chase a
+# rounding error. Weighting each starter by the chance they miss time
+# makes the backup behind them worth something, and correctly worth
+# LESS the deeper you already are -- a 2nd TE covers the TE slot, so a
+# 3rd and 4th add nothing, while an RB3 behind two fragile starters is
+# genuinely valuable.
+#
+# Approximations, deliberately: the point is to stop treating bench value
+# as zero, not to forecast injuries. They also encode why nobody drafts a
+# backup kicker or a second defense.
+INJURY_MISS_RATE = {"RB": 0.20, "WR": 0.15, "TE": 0.15, "QB": 0.12, "K": 0.03, "DEF": 0.0}
+
 
 class DraftAssistant:
     """Polls a Sleeper draft's picks feed, tracks board state, and
@@ -211,6 +231,37 @@ class DraftAssistant:
             return 0
         return int(round(picks_until * rates.get(position, 0.0)))
 
+    def _wait_cost(self, candidate, pools, rates, picks_until):
+        """How many projected points you lose at `candidate`'s position by
+        waiting one turn: the gap between the best there now and the best
+        still expected to be there at your next turn.
+
+        This is the tiebreak when two positions project to the SAME final
+        roster, which happens constantly once your starting slots are
+        nearly full -- the plan can see that pick order doesn't change
+        what you end up with, so every option scores identically.
+
+        The tie used to fall through to VORP, which is exactly backwards.
+        DEF and K have inflated VORP (their replacement level is computed
+        off a very thin pool, the same distortion noted in
+        STREAMABLE_POSITIONS), so when everything tied they WON, and a real
+        mock spent pick 89 on a defense while eight of nine rivals waited
+        until round 14+. Backup QBs win the same way for the same reason.
+
+        Wait-cost inverts that correctly and without any position
+        hardcoding: nobody drafts kickers, defenses or backup QBs early, so
+        their expected loss from waiting is ~0 and they sink to last --
+        which is precisely why you can afford to wait on them. Positions
+        that are actually evaporating keep a positive cost and rise."""
+        if not picks_until:
+            return 0.0
+
+        same_position = pools.get(candidate.position, [])
+        expected_gone = self._expected_taken_by_next_turn(candidate.position, picks_until, rates)
+        if expected_gone >= len(same_position):
+            return round(candidate.points, 2)  # position may be picked clean
+        return round(max(0.0, candidate.points - same_position[expected_gone].points), 2)
+
     def _my_future_pick_offsets(self, picks_until):
         """How many picks after this draft_slot's next turn each of its
         LATER turns falls, e.g. [20, 27, 40, ...] in a snake. Empty when
@@ -232,6 +283,37 @@ class DraftAssistant:
             if slot == my_slot:
                 offsets.append(pick_no - my_next)
         return offsets
+
+    def _roster_value(self, roster):
+        """Expected starting-lineup points over a season, allowing for the
+        fact that starters miss games.
+
+        Healthy-lineup points plus, for each starter, the share of the
+        season they're expected to miss times what the lineup drops to
+        without them. A roster with real cover loses little; a roster whose
+        RB2 is the last man on the bench loses a lot. That penalty is the
+        only thing in the model that makes a bench pick worth more than
+        zero, which is what the late rounds needed (see INJURY_MISS_RATE).
+
+        Self-limiting for the same reason _depth_value is: once a position
+        has one competent backup, the next one never enters the lineup in
+        either the healthy or the injured case, so it changes nothing."""
+        lineup = optimize_lineup(roster, self.roster_positions)
+        healthy = lineup.total_points
+
+        penalty = 0.0
+        for slot in lineup.slots:
+            starter = slot.player
+            if starter is None:
+                continue
+            miss_rate = INJURY_MISS_RATE.get(starter.position, 0.0)
+            if not miss_rate:
+                continue
+            without = [p for p in roster if p.player_id != starter.player_id]
+            depleted = optimize_lineup(without, self.roster_positions).total_points
+            penalty += miss_rate * (healthy - depleted)
+
+        return round(healthy - penalty, 2)
 
     def _plan_value(self, first_choice, pools, rates, future_offsets):
         """Projected total starting-lineup points of the roster you end the
@@ -257,7 +339,7 @@ class DraftAssistant:
         taken_by_me = Counter({first_choice.position: 1})
 
         for elapsed in future_offsets:
-            current = optimize_lineup(roster, self.roster_positions).total_points
+            current = self._roster_value(roster)
             best_candidate = None
             best_gain = None
             for position, players in pools.items():
@@ -265,7 +347,7 @@ class DraftAssistant:
                 if index >= len(players):
                     continue
                 candidate = players[index]
-                gain = optimize_lineup(roster + [candidate], self.roster_positions).total_points - current
+                gain = self._roster_value(roster + [candidate]) - current
                 if best_gain is None or gain > best_gain:
                     best_gain, best_candidate = gain, candidate
             if best_candidate is None:
@@ -273,7 +355,7 @@ class DraftAssistant:
             roster.append(best_candidate)
             taken_by_me[best_candidate.position] += 1
 
-        return round(optimize_lineup(roster, self.roster_positions).total_points, 2)
+        return self._roster_value(roster)
 
     def _depth_value(self, candidate, lineup):
         """What the candidate would add to your lineup if your weakest
@@ -417,6 +499,19 @@ class DraftAssistant:
         rates = self._position_draft_rates()
         future_offsets = self._my_future_pick_offsets(picks_until)
 
+        # How many picks happen between the pick being made RIGHT NOW and
+        # my next one -- the gap every scarcity question is really asking
+        # about ("how many RBs go before I'm back?").
+        #
+        # NOT _picks_until_my_turn(), which measures the distance until I'm
+        # ON the clock and is therefore 0 during every live recommendation,
+        # silently zeroing _expected_taken_by_next_turn and with it the
+        # cost-of-waiting reason and the wait-cost tiebreak. It only ever
+        # read non-zero before the first pick of the draft, which is why a
+        # real mock showed "Cost of waiting" in its pre-draft recommendation
+        # and never again. future_offsets[0] is already this gap.
+        gap_to_next_turn = future_offsets[0] if future_offsets else picks_until
+
         # Within a position you'd always take the better projection, so the
         # only real decision at any pick is WHICH POSITION -- a handful of
         # options, not hundreds of players. That's what makes it affordable
@@ -441,11 +536,20 @@ class DraftAssistant:
             scored.sort(key=lambda pair: (pair[1] > 0, pair[0].vorp), reverse=True)
         else:
             scored = [(p, self._plan_value(p, pools, rates, future_offsets)) for p in options]
-            # VORP breaks ties: when two positions project to the same final
-            # roster (common late, when you'll simply end up with both), take
-            # the better player now rather than betting on a projection of
-            # what will still be there later.
-            scored.sort(key=lambda pair: (pair[1], pair[0].vorp), reverse=True)
+            # Ties are the common case late, when you'll simply end up with
+            # both positions and pick order can't change the final roster.
+            # _wait_cost breaks them by URGENCY -- take the position that
+            # won't still be there next turn, defer the one that will.
+            # VORP is only the last resort, because on its own it hands
+            # every tie to DEF/K (see _wait_cost).
+            scored.sort(
+                key=lambda pair: (
+                    pair[1],
+                    self._wait_cost(pair[0], pools, rates, gap_to_next_turn),
+                    pair[0].vorp,
+                ),
+                reverse=True,
+            )
 
         top_pick = scored[0][0]
         best = top_pick
@@ -522,13 +626,13 @@ class DraftAssistant:
                     f"not just who's best right now."
                 )
 
-        if picks_until:
-            expected_gone = self._expected_taken_by_next_turn(best.position, picks_until, rates)
+        if gap_to_next_turn:
+            expected_gone = self._expected_taken_by_next_turn(best.position, gap_to_next_turn, rates)
             same_position = pools[best.position]
             if expected_gone >= len(same_position):
                 reasons.append(
                     f"Cost of waiting: at the rate {best.position}s are coming off the board, the position "
-                    f"may be picked clean before your next turn ({picks_until} picks away)."
+                    f"may be picked clean before your next turn ({gap_to_next_turn} picks away)."
                 )
             elif expected_gone > 0:
                 fallback = same_position[expected_gone]
@@ -536,7 +640,7 @@ class DraftAssistant:
                 if drop > 0:
                     reasons.append(
                         f"Cost of waiting: ~{expected_gone} more {best.position}(s) should go in the "
-                        f"{picks_until} picks before your next turn, leaving {fallback.name} "
+                        f"{gap_to_next_turn} picks before your next turn, leaving {fallback.name} "
                         f"({drop:.0f} pts worse) as the likely best available."
                     )
 

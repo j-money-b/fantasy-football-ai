@@ -1,5 +1,6 @@
 from ffai.cache import Cache
 from ffai.draft_assistant import DraftAssistant, format_recommendation
+from ffai.lineup import optimize_lineup
 from ffai.models import PlayerVorp
 from ffai.projections import ConsensusEntry
 from ffai.sleeper_client import SleeperAPIError
@@ -529,3 +530,70 @@ def test_recommend_coin_flip_note_ignores_other_positions(tmp_path):
     rec = assistant.recommend()
 
     assert not any("coin flip" in r for r in rec.reasons)
+
+
+# Enough bodies to fill QB/RB/RB/WR/WR/TE and BOTH flex slots, so anyone
+# added on top is genuinely a bench player rather than a flex starter.
+FULL_STARTERS = [
+    _player("qb1", "QB", vorp=300),
+    _player("rb1", "RB", vorp=250), _player("rb2", "RB", vorp=240),
+    _player("wr1", "WR", vorp=260), _player("wr2", "WR", vorp=255),
+    _player("te1", "TE", vorp=200),
+    _player("wr3", "WR", vorp=250), _player("wr4", "WR", vorp=245),  # the two flex
+]
+
+
+def test_roster_value_rewards_cover_at_a_fragile_position(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    starters = list(FULL_STARTERS)
+    backup = _player("rb3", "RB", vorp=180)
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", starters + [backup],
+                               ROSTER_POSITIONS, my_draft_slot=1)
+
+    # Healthy points are identical (the backup never starts); expected
+    # points are not, because he covers an RB who will miss games.
+    assert optimize_lineup(starters, ROSTER_POSITIONS).total_points == \
+        optimize_lineup(starters + [backup], ROSTER_POSITIONS).total_points
+    assert assistant._roster_value(starters + [backup]) > assistant._roster_value(starters)
+
+
+def test_roster_value_gives_redundant_cover_nothing(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    covered = FULL_STARTERS + [_player("te2", "TE", vorp=190)]
+    third = _player("te3", "TE", vorp=120)
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", covered + [third],
+                               ROSTER_POSITIONS, my_draft_slot=1)
+
+    assert assistant._roster_value(covered + [third]) == assistant._roster_value(covered)
+
+
+def test_wait_cost_is_zero_for_positions_nobody_is_drafting(tmp_path):
+    # The DEF/K case: their pool is untouched, so waiting costs nothing --
+    # this is what stops them winning ties against real depth.
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    defenses = [_player(f"d{i}", "DEF", vorp=110 - i) for i in range(5)]
+    backs = [_player(f"r{i}", "RB", vorp=250 - 20 * i) for i in range(5)]
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", defenses + backs,
+                               ROSTER_POSITIONS, my_draft_slot=1)
+    pools = {"DEF": defenses, "RB": backs}
+    rates = {"DEF": 0.0, "RB": 0.3}
+
+    assert assistant._wait_cost(defenses[0], pools, rates, picks_until=10) == 0.0
+    assert assistant._wait_cost(backs[0], pools, rates, picks_until=10) > 0.0
+
+
+def test_gap_to_next_turn_is_nonzero_while_on_the_clock(tmp_path):
+    # Regression: _picks_until_my_turn() is 0 whenever you are ON the
+    # clock, which is every live recommendation -- it must not be what
+    # feeds the scarcity checks, or they silently switch off mid-draft.
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [_player(f"p{i}", "RB", vorp=300 - i) for i in range(60)]
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board,
+                               ROSTER_POSITIONS, my_draft_slot=1, total_rosters=10)
+    assistant.picks = [_pick(i, f"p{i}") for i in range(1, 21)]  # pick 21 is mine
+
+    picks_until = assistant._picks_until_my_turn()
+    offsets = assistant._my_future_pick_offsets(picks_until)
+
+    assert picks_until == 0          # on the clock right now
+    assert offsets and offsets[0] > 0  # but the next turn is a real distance away

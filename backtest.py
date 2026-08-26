@@ -123,6 +123,45 @@ def simulate(strategy, adp_ids, board, roster_positions, total_rosters, consensu
     return my_roster, optimize_lineup(my_roster, roster_positions), my_picks
 
 
+# Share of a season a starter at each position is expected to miss. Kept
+# HERE rather than imported from draft_assistant so the strategy is not
+# graded by the same constants it optimises against -- if these two ever
+# need to disagree, this is the one that decides who won.
+EVAL_MISS_RATE = {"RB": 0.20, "WR": 0.15, "TE": 0.15, "QB": 0.12, "K": 0.03, "DEF": 0.0}
+
+
+def score_roster(roster, roster_positions):
+    """Returns (healthy, expected).
+
+    `healthy` is optimal starting-lineup points with nobody hurt -- the
+    measure this harness used to report on its own, and the reason it
+    could not see the bug it was built to catch. Bench players contribute
+    exactly 0 to it, so a roster that spends round 8 on a kicker and
+    rounds 11-14 on tight ends it can never start scores identically to
+    one that used those picks on real depth. Optimising against it alone
+    rewards hoarding whoever has the highest raw projection on the bench.
+
+    `expected` charges each starter's expected missed games against what
+    the lineup falls to without them, so cover is worth something and
+    redundant cover is not. Judge changes on this one; `healthy` is kept
+    alongside it because a change that raises expected while lowering
+    healthy is usually right, and you want to see both halves of that
+    trade rather than be surprised by it."""
+    lineup = optimize_lineup(roster, roster_positions)
+    healthy = lineup.total_points
+    penalty = 0.0
+    for slot in lineup.slots:
+        starter = slot.player
+        if starter is None:
+            continue
+        miss_rate = EVAL_MISS_RATE.get(starter.position, 0.0)
+        if not miss_rate:
+            continue
+        without = [p for p in roster if p.player_id != starter.player_id]
+        penalty += miss_rate * (healthy - optimize_lineup(without, roster_positions).total_points)
+    return healthy, healthy - penalty
+
+
 def main():
     picks_path = sys.argv[1] if len(sys.argv) > 1 else "/tmp/picks3.json"
     real_picks = sorted(json.load(open(picks_path)), key=lambda p: p["pick_no"])
@@ -137,19 +176,27 @@ def main():
         print(f"=== opponent model: {opponents} ===")
         results = {}
         for strategy in ("tool", "adp"):
-            totals = []
+            healthy_totals, expected_totals, kdef_rounds = [], [], []
             for my_slot in range(1, total_rosters + 1):
-                _, lineup, _ = simulate(
+                roster, _lineup, my_picks = simulate(
                     strategy, adp_ids, board, roster_positions, total_rosters, consensus,
                     client, cache, my_slot, rounds, opponents=opponents,
                 )
-                totals.append(lineup.total_points)
-            results[strategy] = totals
-            print(f"  {strategy:5s} avg {sum(totals)/len(totals):7.1f}   "
-                  f"min {min(totals):7.1f}  max {max(totals):7.1f}")
+                healthy, expected = score_roster(roster, roster_positions)
+                healthy_totals.append(healthy)
+                expected_totals.append(expected)
+                kdef_rounds.extend(
+                    i + 1 for i, (_pick_no, p) in enumerate(my_picks) if p.position in ("K", "DEF")
+                )
+            results[strategy] = expected_totals
+            avg_kdef = sum(kdef_rounds) / len(kdef_rounds) if kdef_rounds else float("nan")
+            print(f"  {strategy:5s} expected {sum(expected_totals)/len(expected_totals):7.1f}   "
+                  f"healthy {sum(healthy_totals)/len(healthy_totals):7.1f}   "
+                  f"avg K/DEF round {avg_kdef:4.1f}")
         wins = sum(1 for t, a in zip(results["tool"], results["adp"]) if t > a)
         edge = (sum(results["tool"]) - sum(results["adp"])) / total_rosters
-        print(f"  tool beats ADP baseline in {wins}/{total_rosters} draft slots, avg edge {edge:+.1f} pts\n")
+        print(f"  tool beats ADP baseline in {wins}/{total_rosters} draft slots, "
+              f"avg edge {edge:+.1f} expected pts\n")
 
 
 if __name__ == "__main__":
