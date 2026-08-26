@@ -470,3 +470,62 @@ def test_format_recommendation_includes_player_and_reasons(tmp_path):
 
     assert "Test Back (RB, DET)" in text
     assert text.startswith("Recommended pick:")
+
+
+def test_recommend_flags_coin_flip_when_same_position_alternatives_are_within_noise(tmp_path):
+    # Mirrors the real mock that motivated this: Chase Brown recommended at
+    # 1.09 with Derrick Henry and Saquon Barkley still on the board, all
+    # three within a handful of season-long points.
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [
+        _player("brown", "RB", name="Chase Brown", vorp=255.2, tier=5),
+        _player("henry", "RB", name="Derrick Henry", vorp=246.9, tier=6),
+        _player("barkley", "RB", name="Saquon Barkley", vorp=246.7, tier=6),
+    ]
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1)
+
+    rec = assistant.recommend()
+
+    assert rec.player.player_id == "brown"
+    note = next(r for r in rec.reasons if "coin flip" in r)
+    assert "Derrick Henry" in note and "Saquon Barkley" in note
+    # Must land directly under the headline, not buried at the bottom.
+    assert rec.reasons.index(note) == 1
+
+
+def test_recommend_omits_coin_flip_note_when_the_pick_is_clearly_best(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [
+        _player("gibbs", "RB", name="Jahmyr Gibbs", vorp=331.4, tier=1),
+        _player("scrub", "RB", name="Deep Bench Back", vorp=180.0, tier=9),
+    ]
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1)
+
+    assert not any("coin flip" in r for r in assistant.recommend().reasons)
+
+
+def test_recommend_coin_flip_note_summarises_beyond_three_alternatives(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [_player(f"rb{i}", "RB", name=f"Back {i}", vorp=250.0 - i, tier=5) for i in range(6)]
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1)
+
+    note = next(r for r in assistant.recommend().reasons if "coin flip" in r)
+
+    assert "Back 1, Back 2, Back 3 and 2 others" in note
+    assert "Back 4" not in note
+
+
+def test_recommend_coin_flip_note_ignores_other_positions(tmp_path):
+    # A close WR is a different decision (different slot, different plan),
+    # already covered by the plan-value edge line -- not a coin flip.
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = [
+        _player("rb1", "RB", name="Lead Back", vorp=250.0, tier=3),
+        _player("wr1", "WR", name="Close Receiver", vorp=249.0, tier=3),
+        _player("rb2", "RB", name="Far Back", vorp=150.0, tier=9),
+    ]
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1)
+
+    rec = assistant.recommend()
+
+    assert not any("coin flip" in r for r in rec.reasons)

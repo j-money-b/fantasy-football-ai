@@ -25,6 +25,24 @@ POSITION_RATE_PRIOR_WEIGHT = 10
 # (their replacement level is computed off a very thin pool).
 STREAMABLE_POSITIONS = {"DEF", "K"}
 
+# A projection gap this small is noise, not a decision. Expressed per game
+# so the band scales with the season and reads in a unit that means
+# something: 0.75 pts/game is under one PPR reception a week, which is well
+# inside the error bars of any projection source. Below this, the tool says
+# the candidates are effectively tied instead of announcing a winner --
+# a real mock had it recommend Chase Brown (255.2) with Derrick Henry
+# (246.9) and Saquon Barkley (246.7) still on the board, and reported that
+# 8-point edge in the same confident voice it uses for a 90-point one.
+# The ordering itself was right (both our projections and FantasyPros'
+# consensus stat lines put Brown marginally ahead), but presenting a coin
+# flip as a verdict is what made a correct pick feel broken.
+NOISE_POINTS_PER_GAME = 0.75
+FANTASY_SEASON_GAMES = 17
+NOISE_BAND_POINTS = NOISE_POINTS_PER_GAME * FANTASY_SEASON_GAMES
+
+# How many tied alternatives to name before summarising the rest.
+MAX_NAMED_TIED_ALTERNATIVES = 3
+
 
 class DraftAssistant:
     """Polls a Sleeper draft's picks feed, tracks board state, and
@@ -483,6 +501,13 @@ class DraftAssistant:
                 f"{best.vorp:+.1f}) -- bench/depth pick.",
             )
 
+        # Second, right under the headline: if this is a coin flip the
+        # reader needs to know before the confident-sounding reasons below,
+        # not after them.
+        tie_note = self._tie_note(best, pools)
+        if tie_note:
+            reasons.insert(1, tie_note)
+
         if best.tier is not None:
             reasons.append(f"Tier {best.tier} at {best.position}.")
 
@@ -517,6 +542,37 @@ class DraftAssistant:
 
         reasons.extend(self._shared_reasons(best))
         return Recommendation(player=best, reasons=reasons, degraded=False, data_source=best.data_source)
+
+    def _tied_alternatives(self, best, pools):
+        """Still-available players at `best`'s position whose projection is
+        inside NOISE_BAND_POINTS of his, in board order.
+
+        Deliberately same-position only. A cross-position gap is already
+        reported as the plan-value edge, and that one IS a real decision
+        even when it's small -- it's the difference between two different
+        final rosters. This is the other case: same slot, same plan, a
+        projection gap too thin to justify the word "recommended"."""
+        return [
+            p for p in pools[best.position]
+            if p.player_id != best.player_id
+            and abs(best.points - p.points) <= NOISE_BAND_POINTS
+        ]
+
+    def _tie_note(self, best, pools):
+        tied = self._tied_alternatives(best, pools)
+        if not tied:
+            return None
+
+        named = tied[:MAX_NAMED_TIED_ALTERNATIVES]
+        names = ", ".join(p.name for p in named)
+        remainder = len(tied) - len(named)
+        if remainder:
+            names += f" and {remainder} other{'s' if remainder > 1 else ''}"
+        return (
+            f"Effectively a coin flip: {names} project within "
+            f"{NOISE_POINTS_PER_GAME:g} pts/game of {best.name} -- inside the margin of error, so "
+            f"any of them is a defensible pick here. {best.name} is the narrow edge, not a verdict."
+        )
 
     def _shared_reasons(self, best):
         reasons = []
