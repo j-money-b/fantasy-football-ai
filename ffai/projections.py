@@ -1,5 +1,7 @@
 import json
+import logging
 import re
+import time
 import unicodedata
 from dataclasses import dataclass, field
 
@@ -7,6 +9,13 @@ import requests
 from bs4 import BeautifulSoup
 
 from ffai.config import ESPN_HOST, FANTASYPROS_HOST, SLEEPER_PROJECTIONS_HOST
+
+logger = logging.getLogger(__name__)
+
+# Sleeper is the sole source of weekly projections, so a transient blip there
+# is a total outage for the brief rather than a downgrade to a second source.
+SLEEPER_FETCH_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 1.0
 
 REQUEST_TIMEOUT_SECONDS = 15
 USER_AGENT_HEADERS = {
@@ -93,11 +102,13 @@ class ProjectionsAdapter:
         espn_host: str = ESPN_HOST,
         fantasypros_host: str = FANTASYPROS_HOST,
         timeout: int = REQUEST_TIMEOUT_SECONDS,
+        retry_backoff_seconds: float = RETRY_BACKOFF_SECONDS,
     ):
         self.sleeper_host = sleeper_host
         self.espn_host = espn_host
         self.fantasypros_host = fantasypros_host
         self.timeout = timeout
+        self.retry_backoff_seconds = retry_backoff_seconds
 
     def fetch(self, players_raw, season, week=None, positions=DEFAULT_POSITIONS, known_player_ids=None):
         """Sleeper -> ESPN -> degraded. `players_raw` is the full Sleeper
@@ -149,17 +160,47 @@ class ProjectionsAdapter:
             result[position] = [e for e in entries if e.player_id is not None]
         return result
 
+    def _get_with_retry(self, url, **kwargs):
+        """GET, retrying transient failures only.
+
+        Sleeper is the ONLY source of WEEKLY projections -- _fetch_espn
+        refuses week != None outright as an unverified shape, and
+        FantasyPros' anonymous tier stops at 10 players per position. So
+        unlike the season-long path, a single timed-out request here leaves
+        the brief with no projections at all rather than degrading to a
+        second source. Replaying the 2025 season hit exactly that: one week
+        of fourteen died on a 15-second read timeout and produced nothing,
+        and it succeeded on a plain retry seconds later.
+
+        Retries timeouts, connection errors and 5xx (the server's problem,
+        likely different next time). A 4xx is a permanent answer -- wrong
+        URL, wrong params -- and retrying it just delays an honest failure."""
+        last_exc = None
+        for attempt in range(SLEEPER_FETCH_ATTEMPTS):
+            try:
+                response = requests.get(url, timeout=self.timeout, **kwargs)
+                if response.status_code >= 500:
+                    raise ProjectionsFetchError(f"server error {response.status_code}")
+                response.raise_for_status()
+                return response
+            except (requests.Timeout, requests.ConnectionError, ProjectionsFetchError) as exc:
+                last_exc = exc
+            except requests.RequestException as exc:
+                raise ProjectionsFetchError(str(exc)) from exc  # 4xx: permanent, don't retry
+
+            if attempt < SLEEPER_FETCH_ATTEMPTS - 1:
+                logger.warning("projections fetch attempt %d failed (%s); retrying", attempt + 1, last_exc)
+                time.sleep(self.retry_backoff_seconds * (attempt + 1))
+
+        raise ProjectionsFetchError(str(last_exc))
+
     def _fetch_sleeper(self, season, week, positions):
         if week is None:
             url = f"{self.sleeper_host}/projections/nfl/{season}"
         else:
             url = f"{self.sleeper_host}/projections/nfl/{season}/{week}"
         params = {"season_type": "regular", "position[]": positions}
-        try:
-            response = requests.get(url, params=params, timeout=self.timeout)
-            response.raise_for_status()
-        except requests.RequestException as exc:
-            raise ProjectionsFetchError(str(exc)) from exc
+        response = self._get_with_retry(url, params=params)
 
         data = response.json()
         if not isinstance(data, list):

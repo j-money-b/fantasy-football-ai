@@ -1,6 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
+import requests
+
+from ffai import projections as projections_module
 from ffai.projections import (
     ProjectionsAdapter,
     ProjectionsFetchError,
@@ -207,3 +211,90 @@ def test_fetch_consensus_top10_matches_real_fixture_players(monkeypatch):
     # every returned entry matched to a real player_id (unmatched entries -- e.g.
     # players not in this trimmed fixture -- are dropped, not guessed)
     assert all(e.player_id is not None for e in result["RB"])
+
+
+class _FlakyResponse:
+    def __init__(self, status_code=200, payload=None):
+        self.status_code = status_code
+        self._payload = payload if payload is not None else []
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"{self.status_code}")
+
+    def json(self):
+        return self._payload
+
+
+def _sleeper_rows(n=100):
+    return [{"player_id": str(i), "stats": {"rush_yd": 500.0}} for i in range(n)]
+
+
+def test_sleeper_fetch_retries_a_transient_timeout(monkeypatch):
+    """Sleeper is the ONLY source of weekly projections -- ESPN refuses the
+    shape and FantasyPros stops at 10 per position -- so one timed-out
+    request used to mean a brief with no projections at all. Replaying 2025
+    lost a full week to exactly this, and a plain retry fixed it."""
+    calls = []
+
+    def flaky_get(url, timeout=None, **kwargs):
+        calls.append(url)
+        if len(calls) < 3:
+            raise requests.Timeout("read timed out")
+        return _FlakyResponse(payload=_sleeper_rows())
+
+    monkeypatch.setattr(projections_module.requests, "get", flaky_get)
+    adapter = ProjectionsAdapter(retry_backoff_seconds=0)
+
+    raw = adapter._fetch_sleeper("2026", 3, ["RB"])
+
+    assert len(calls) == 3
+    assert len(raw) == 100
+
+
+def test_sleeper_fetch_retries_a_server_error(monkeypatch):
+    calls = []
+
+    def flaky_get(url, timeout=None, **kwargs):
+        calls.append(url)
+        if len(calls) == 1:
+            return _FlakyResponse(status_code=503)
+        return _FlakyResponse(payload=_sleeper_rows())
+
+    monkeypatch.setattr(projections_module.requests, "get", flaky_get)
+    raw = ProjectionsAdapter(retry_backoff_seconds=0)._fetch_sleeper("2026", 3, ["RB"])
+
+    assert len(calls) == 2
+    assert len(raw) == 100
+
+
+def test_sleeper_fetch_does_not_retry_a_client_error(monkeypatch):
+    """A 4xx is a permanent answer -- wrong URL or params. Retrying it only
+    delays an honest failure and burns the clock on a Sunday morning."""
+    calls = []
+
+    def bad_get(url, timeout=None, **kwargs):
+        calls.append(url)
+        return _FlakyResponse(status_code=404)
+
+    monkeypatch.setattr(projections_module.requests, "get", bad_get)
+
+    with pytest.raises(ProjectionsFetchError):
+        ProjectionsAdapter(retry_backoff_seconds=0)._fetch_sleeper("2026", 3, ["RB"])
+
+    assert len(calls) == 1
+
+
+def test_sleeper_fetch_gives_up_after_the_attempt_limit(monkeypatch):
+    calls = []
+
+    def always_timeout(url, timeout=None, **kwargs):
+        calls.append(url)
+        raise requests.Timeout("read timed out")
+
+    monkeypatch.setattr(projections_module.requests, "get", always_timeout)
+
+    with pytest.raises(ProjectionsFetchError):
+        ProjectionsAdapter(retry_backoff_seconds=0)._fetch_sleeper("2026", 3, ["RB"])
+
+    assert len(calls) == projections_module.SLEEPER_FETCH_ATTEMPTS
