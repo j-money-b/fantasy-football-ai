@@ -21,6 +21,7 @@ from ffai.cache import Cache
 from ffai.config import LEAGUE_ID
 from ffai.draft_assistant import DraftAssistant
 from ffai.lineup import optimize_lineup
+from ffai.models import PlayerProjection
 from ffai.player_pool import is_draftable, to_projection_pool
 from ffai.projections import ProjectionsAdapter
 from ffai.repository import fetch_league, fetch_players, fetch_projections
@@ -51,6 +52,27 @@ def load_board():
     build_tiers(board)
     consensus = adapter.fetch_consensus_top10(players_raw)
     return client, cache, board, roster_positions, total_rosters, consensus
+
+
+def open_slot_positions(roster, roster_positions):
+    """Positions that would land in an empty starting slot right now --
+    i.e. what a manager drafting "by need" would still be shopping for.
+    Probes with a 1-point dummy at each position and asks whether the
+    optimal lineup gains a filled slot, so FLEX eligibility is handled by
+    optimize_lineup rather than re-derived here."""
+    base = sum(1 for s in optimize_lineup(roster, roster_positions).slots if s.player is not None)
+    open_positions = set()
+    for position in {"QB", "RB", "WR", "TE", "K", "DEF"}:
+        dummy = PlayerProjection(
+            player_id="__probe__", name="probe", position=position,
+            team=None, bye_week=None, points=1.0, data_source="none",
+        )
+        filled = sum(
+            1 for s in optimize_lineup(roster + [dummy], roster_positions).slots if s.player is not None
+        )
+        if filled > base:
+            open_positions.add(position)
+    return open_positions
 
 
 def slot_for_pick(pick_no, total_rosters):
@@ -101,6 +123,27 @@ def simulate(strategy, adp_ids, board, roster_positions, total_rosters, consensu
         if slot == my_slot:
             if strategy == "adp":
                 choice = pick_for_opponent(slot, round_no)
+            elif strategy == "points+need":
+                # The fair version of "just grab the highest projection":
+                # highest projected total among positions that still have an
+                # empty starting slot, falling back to the whole board once
+                # the lineup is full. Still blind to scarcity -- it never
+                # asks who will still be there at the next turn.
+                open_positions = open_slot_positions(my_roster, roster_positions)
+                pool = [
+                    p for p in board
+                    if p.player_id not in drafted and (not open_positions or p.position in open_positions)
+                ]
+                choice = max(pool, key=lambda p: p.points, default=None)
+            elif strategy == "points":
+                # "Just take the highest projected total left" -- no notion of
+                # positional scarcity, roster slots or replacement level. The
+                # naive baseline the tool has to beat to justify existing.
+                choice = max(
+                    (p for p in board if p.player_id not in drafted),
+                    key=lambda p: p.points,
+                    default=None,
+                )
             else:
                 assistant.drafted_player_ids = drafted
                 assistant.my_drafted_players = my_roster
@@ -175,7 +218,7 @@ def main():
     for opponents in ("adp", "needs"):
         print(f"=== opponent model: {opponents} ===")
         results = {}
-        for strategy in ("tool", "adp"):
+        for strategy in ("tool", "adp", "points+need", "points"):
             healthy_totals, expected_totals, kdef_rounds = [], [], []
             for my_slot in range(1, total_rosters + 1):
                 roster, _lineup, my_picks = simulate(
@@ -193,10 +236,12 @@ def main():
             print(f"  {strategy:5s} expected {sum(expected_totals)/len(expected_totals):7.1f}   "
                   f"healthy {sum(healthy_totals)/len(healthy_totals):7.1f}   "
                   f"avg K/DEF round {avg_kdef:4.1f}")
-        wins = sum(1 for t, a in zip(results["tool"], results["adp"]) if t > a)
-        edge = (sum(results["tool"]) - sum(results["adp"])) / total_rosters
-        print(f"  tool beats ADP baseline in {wins}/{total_rosters} draft slots, "
-              f"avg edge {edge:+.1f} expected pts\n")
+        for baseline, label in (("adp", "ADP"), ("points+need", "projected-points+need"), ("points", "raw projected-points")):
+            wins = sum(1 for t, b in zip(results["tool"], results[baseline]) if t > b)
+            edge = (sum(results["tool"]) - sum(results[baseline])) / total_rosters
+            print(f"  tool beats {label} baseline in {wins}/{total_rosters} draft slots, "
+                  f"avg edge {edge:+.1f} expected pts")
+        print()
 
 
 if __name__ == "__main__":
