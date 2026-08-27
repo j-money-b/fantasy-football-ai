@@ -20,5 +20,12 @@ SLEEPER_PROJECTIONS_HOST = os.environ.get("SLEEPER_PROJECTIONS_HOST", "https://a
 ESPN_HOST = os.environ.get("ESPN_HOST", "https://lm-api-reads.fantasy.espn.com")
 FANTASYPROS_HOST = os.environ.get("FANTASYPROS_HOST", "https://www.fantasypros.com")
 
+# Real-human ADP (ffai/adp.py). Fantasy Football Calculator, not FantasyPros:
+# FP renders its ADP table in JavaScript and gates projections past the top 10
+# per position, while FFC serves unauthenticated JSON built from real human
+# mock drafts. Refreshed daily -- ADP moves with the news cycle, not by the hour.
+ADP_HOST = os.environ.get("FFAI_ADP_HOST", "https://fantasyfootballcalculator.com")
+ADP_MAX_AGE_HOURS = int(os.environ.get("FFAI_ADP_MAX_AGE_HOURS", "24"))
+
 # Draft assistant (PRD 6.1).
 DRAFT_POLL_INTERVAL_SECONDS = int(os.environ.get("FFAI_DRAFT_POLL_INTERVAL_SECONDS", "5"))

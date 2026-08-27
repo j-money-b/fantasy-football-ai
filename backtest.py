@@ -1,21 +1,30 @@
-"""Backtest draft strategies against real Sleeper mock drafts.
+"""Backtest draft strategies against a table of human managers.
 
 Our slot picks by the strategy under test; the other nine teams pick by
 one of two opponent models. Final rosters are scored by optimal starting-
 lineup points, so strategies are compared on outcome rather than on
 whether individual picks "look" reasonable.
 
-Two opponent models matter because the mock drafts this was validated
-against were played by Sleeper autopick bots, which take the highest
-projected points available and so hammer RB far harder than humans do.
-Tuning against that alone would overfit to bot behaviour, so "needs"
-models a human-ish table that stops loading up on a position once it has
-enough of them and leaves K/DEF until late.
+The pick order underneath both opponent models now defaults to real human
+ADP (ffai/adp.py) at this league's exact shape. It used to be seeded from
+a single completed Sleeper mock, which was a real problem: those mocks
+were played by autopick bots that take the highest projected total
+available, so they clear the RB board far earlier than humans do. Every
+scarcity number the recommender had ever been graded on was measured
+against a table running the one strategy it exists to beat, on a board
+that strategy had itself distorted. Pass a picks JSON as argv[1] to
+replay a specific draft instead.
+
+Two opponent models remain because ADP fixes what order players go in,
+not how a manager reacts to their own roster. "adp" follows the order
+blindly; "needs" stops loading up on a position once it has enough and
+leaves K/DEF until late.
 """
 import json
 import sys
 from collections import Counter
 
+from ffai.adp import fetch_adp
 from ffai.byes import load_bye_weeks
 from ffai.cache import Cache
 from ffai.config import LEAGUE_ID
@@ -51,7 +60,7 @@ def load_board():
     board = compute_vorp(pool, levels)
     build_tiers(board)
     consensus = adapter.fetch_consensus_top10(players_raw)
-    return client, cache, board, roster_positions, total_rosters, consensus
+    return client, cache, board, roster_positions, total_rosters, consensus, players_raw, season
 
 
 def open_slot_positions(roster, roster_positions):
@@ -206,14 +215,32 @@ def score_roster(roster, roster_positions):
 
 
 def main():
-    picks_path = sys.argv[1] if len(sys.argv) > 1 else "/tmp/picks3.json"
-    real_picks = sorted(json.load(open(picks_path)), key=lambda p: p["pick_no"])
-    adp_ids = [p["player_id"] for p in real_picks]
+    picks_path = sys.argv[1] if len(sys.argv) > 1 else None
 
-    client, cache, board, roster_positions, total_rosters, consensus = load_board()
+    client, cache, board, roster_positions, total_rosters, consensus, players_raw, season = load_board()
     rounds = len(roster_positions)
 
-    print(f"{total_rosters} teams, {rounds} rounds, roster {roster_positions}\n")
+    # Default to real human ADP. A single completed draft can be passed
+    # instead, but note what that costs: every draft available to replay so
+    # far was Sleeper autopick bots, whose pick order is a projection column
+    # read top-down. Grading positional-scarcity logic against that measures
+    # the tool against the strategy it exists to beat, on a board shaped by
+    # that same strategy. ADP is 7k+ real human drafts at this league's exact
+    # shape, which is the table the tool will actually face.
+    if picks_path:
+        real_picks = sorted(json.load(open(picks_path)), key=lambda p: p["pick_no"])
+        adp_ids = [p["player_id"] for p in real_picks]
+        order_label = f"single draft replay ({picks_path}, {len(adp_ids)} picks)"
+    else:
+        adp_ids, stale, meta = fetch_adp(cache, players_raw, teams=total_rosters, season=season)
+        order_label = (
+            f"human ADP ({meta.get('total_drafts')} {meta.get('type')} drafts, "
+            f"{meta.get('teams')}-team, {meta.get('start_date')}..{meta.get('end_date')})"
+            + (" [STALE CACHE]" if stale else "")
+        )
+
+    print(f"{total_rosters} teams, {rounds} rounds, roster {roster_positions}")
+    print(f"pick order: {order_label}\n")
 
     for opponents in ("adp", "needs"):
         print(f"=== opponent model: {opponents} ===")

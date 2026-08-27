@@ -1,5 +1,6 @@
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 import requests
@@ -317,6 +318,13 @@ def _parse_fantasypros_table(html, position):
 
 
 def _normalize_name(name):
+    # Fold accents before stripping punctuation, or the strip silently eats
+    # the letter itself: "Piñeiro" -> "pieiro", which matches nothing, while
+    # Sleeper stores the transliterated "pineiro". Decomposing to NFKD splits
+    # "ñ" into "n" + combining tilde so only the mark is discarded. This was
+    # the sole unmatched entry out of 266 in the ADP feed.
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(ch for ch in name if not unicodedata.combining(ch))
     name = re.sub(r"\b(Jr\.?|Sr\.?|II|III|IV|V)\b", "", name, flags=re.IGNORECASE)
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
