@@ -357,20 +357,36 @@ class DraftAssistant:
 
         return self._roster_value(roster)
 
-    def _depth_value(self, candidate, lineup):
-        """What the candidate would add to your lineup if your weakest
-        current starter at their position went down -- their value as the
-        first real backup there.
+    def _depth_value(self, candidate, lineup, losses=1):
+        """What the candidate would add if your `losses` weakest current
+        starters at their position went down -- their value as cover there.
 
         This is what separates a useful depth pick from a dead one once
-        every starting slot is full. It self-limits without any per-
-        position roster caps: your first backup at a position scores well
-        (nothing covers that slot if the starter is out), while a third or
-        fourth scores exactly 0, because the backup you already have would
-        step in ahead of them. A real mock draft ended with four TEs and
-        four defenses on the bench precisely because nothing measured
-        this -- with marginal value 0 across the board, ranking fell
-        through to raw VORP, which has no notion of redundancy."""
+        every starting slot is full, and it self-limits without any
+        per-position roster caps.
+
+        `losses` exists because the single-loss version quietly failed the
+        claim its own docstring used to make. It does NOT return 0 for a
+        redundant backup: it returns the UPGRADE over the backup you
+        already have, which is positive whenever the next man is even
+        marginally better. In a real mock that read +2.10 for a third tight
+        end (Kelce 171.4 over Kittle 169.3) behind a starter who never
+        misses a lineup -- enough to clear a `> 0` gate, so TE stayed
+        eligible for bench picks forever and the draft ended with four of
+        them. Meanwhile RB and WR depth scored exactly 0.00 and were
+        dropped from consideration entirely, at the two positions with two
+        starting slots each and the highest injury rates on the board.
+
+        Both numbers were right; the question was wrong. Under one loss a
+        roster with a single backup anywhere IS covered, so nothing
+        rates -- and the tie fell to whichever position happened to offer a
+        rounding-error upgrade. Asking about two simultaneous losses is
+        what makes redundancy visible: a fourth TE still cannot cover more
+        than the one TE slot (there is only one starter to lose, so this
+        degenerates to the single-loss answer and stays ~0), while a third
+        RB covers a genuine hole, because losing two of RB1/RB2/FLEX leaves
+        a slot no one on the roster can fill. Seasons have byes and
+        multiple injuries; one-at-a-time was the unrealistic assumption."""
         starters_at_position = [
             slot.player for slot in lineup.slots
             if slot.player is not None and slot.player.position == candidate.position
@@ -378,10 +394,14 @@ class DraftAssistant:
         if not starters_at_position:
             return 0.0  # nobody starting there yet -- marginal value already covers that case
 
-        weakest = min(starters_at_position, key=lambda p: p.points)
-        without_weakest = [p for p in self.my_drafted_players if p.player_id != weakest.player_id]
-        before = optimize_lineup(without_weakest, self.roster_positions).total_points
-        after = optimize_lineup(without_weakest + [candidate], self.roster_positions).total_points
+        # min() guards the degenerate case above: asking about two losses at
+        # a position that only starts one player is just the one-loss
+        # question, which is exactly why redundant TEs stop qualifying.
+        weakest = sorted(starters_at_position, key=lambda p: p.points)[:max(1, losses)]
+        weakest_ids = {p.player_id for p in weakest}
+        depleted = [p for p in self.my_drafted_players if p.player_id not in weakest_ids]
+        before = optimize_lineup(depleted, self.roster_positions).total_points
+        after = optimize_lineup(depleted + [candidate], self.roster_positions).total_points
         return round(after - before, 2)
 
     def _draftable_candidates(self, available):
@@ -522,18 +542,57 @@ class DraftAssistant:
         # leaving them in is how a real mock draft ended up with four
         # bench TEs (see _depth_value).
         current_lineup = optimize_lineup(self.my_drafted_players, self.roster_positions)
-        options = [
-            players[0] for players in pools.values()
-            if marginal(players[0]) > 0 or self._depth_value(players[0], current_lineup) > 0
-        ]
+
+        def worth_considering(player):
+            if marginal(player) > 0:
+                return True
+            # Cover has to be worth a real pick, not a rounding error. A bare
+            # "> 0" let a +2.10 upgrade at an already-double-covered position
+            # keep qualifying round after round; NOISE_BAND_POINTS is the same
+            # threshold used everywhere else here to decide a season-long gap
+            # is too small to act on.
+            if self._depth_value(player, current_lineup) > NOISE_BAND_POINTS:
+                return True
+            # And ask the question one-at-a-time cover cannot answer: if two
+            # starters at this position went down, is there anybody left? This
+            # is what readmits RB/WR depth -- both score exactly 0.00 under a
+            # single loss once any backup exists -- while leaving a redundant
+            # 3rd/4th TE at ~0, since a position that starts one player has
+            # only one starter to lose.
+            return self._depth_value(player, current_lineup, losses=2) > NOISE_BAND_POINTS
+
+        options = [players[0] for players in pools.values() if worth_considering(players[0])]
         if not options:
             options = [players[0] for players in pools.values()]
 
         if not future_offsets:
             # Nothing left to plan against (draft geometry unknown, or this
-            # is the last pick): fill an open slot with the best talent.
-            scored = [(p, marginal(p)) for p in candidates]
-            scored.sort(key=lambda pair: (pair[1] > 0, pair[0].vorp), reverse=True)
+            # is the last pick): take the best real contribution available --
+            # an open starting slot if there is one, otherwise genuine cover.
+            #
+            # This used to rank by raw VORP once no slot was open, which
+            # hands the pick to whichever position's replacement level is
+            # computed off the thinnest pool. That is how a real mock spent
+            # its FINAL pick on a fourth tight end at VORP -1.1, behind a
+            # starter who never leaves the lineup, with a bye-week collision
+            # the tool printed in its own reasons.
+            # Cover is contingent, an open starting slot is not, so they
+            # cannot be compared at face value: a backup worth 20 pts only
+            # in the weeks his starter is out is not worth more than a
+            # kicker who scores 9 every week. Discount each cover case by
+            # how much of a season it actually applies to -- one starter's
+            # missed share, and for two at once the product, since two
+            # absences have to coincide.
+            def contribution(player):
+                miss_rate = INJURY_MISS_RATE.get(player.position, 0.0)
+                return max(
+                    marginal(player),
+                    miss_rate * self._depth_value(player, current_lineup),
+                    miss_rate**2 * self._depth_value(player, current_lineup, losses=2),
+                )
+
+            scored = [(p, contribution(p)) for p in options]
+            scored.sort(key=lambda pair: (pair[1], pair[0].vorp), reverse=True)
         else:
             scored = [(p, self._plan_value(p, pools, rates, future_offsets)) for p in options]
             # Near-ties are the common case late, when you'll simply end up

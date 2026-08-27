@@ -153,10 +153,21 @@ def test_recommend_healthy_stops_chasing_a_filled_position(tmp_path):
     assert any("adds 9.0 pts" in r for r in rec.reasons)
 
 
-def test_recommend_healthy_falls_back_to_vorp_once_lineup_is_full(tmp_path):
-    """Once every starting slot is genuinely saturated, marginal value is 0
-    for everyone -- VORP (best remaining talent) breaks the tie rather than
-    leaving the ordering arbitrary."""
+def test_recommend_healthy_prefers_real_cover_once_lineup_is_full(tmp_path):
+    """Once every starting slot is saturated, marginal value is 0 for
+    everyone and the pick has to be broken some other way.
+
+    This used to fall through to VORP, and that was wrong in the way VORP
+    is always wrong as a tiebreak here: it is a season-long valuation
+    measured against a replacement level computed off each position's own
+    pool, so the thinner the pool the more it flatters its players. A real
+    mock spent its FINAL pick on a fourth tight end at VORP -1.1, behind a
+    starter who never leaves the lineup.
+
+    The tie now breaks on how much cover the player actually provides.
+    CandA is the lower-VORP candidate (5 vs 9) but plays the position with
+    more starting slots to lose and the higher miss rate, so he is worth
+    more as depth and wins despite the worse static number."""
     cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
     starters = [
         PlayerVorp(player_id="qb", name="QB", position="QB", team="Z1", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
@@ -179,8 +190,52 @@ def test_recommend_healthy_falls_back_to_vorp_once_lineup_is_full(tmp_path):
 
     rec = assistant.recommend()
 
-    assert rec.player.player_id == "b"
+    assert rec.player.player_id == "a"
     assert any("Wouldn't crack your starting lineup" in r for r in rec.reasons)
+
+
+def test_recommend_healthy_stops_stacking_redundant_cover_at_a_thin_position(tmp_path):
+    """Regression for the four-tight-end mock draft (real draft
+    1398505784274350080, slot 3).
+
+    The roster already starts one TE and carries a backup, so a third TE
+    cannot cover anything: there is only one TE slot to lose. But the old
+    single-loss depth check did not return 0 for him -- it returned the
+    UPGRADE over the existing backup (+2 here, +2.10 in the real draft),
+    which cleared a bare `> 0` gate and kept TE eligible for bench picks
+    round after round. RB depth meanwhile scored exactly 0.00, because one
+    backup covers one loss, and was dropped from consideration entirely.
+
+    Asking about two simultaneous losses separates them: TE has only one
+    starter to lose so it stays ~0, while losing two of RB1/RB2/FLEX
+    leaves a hole no one on the roster can fill."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    starters = [
+        PlayerVorp(player_id="qb", name="QB", position="QB", team="Z1", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="rb1", name="RB1", position="RB", team="Z2", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="rb2", name="RB2", position="RB", team="Z3", bye_week=None, points=90, data_source="sleeper", vorp=45, tier=1),
+        PlayerVorp(player_id="wr1", name="WR1", position="WR", team="Z4", bye_week=None, points=100, data_source="sleeper", vorp=50, tier=1),
+        PlayerVorp(player_id="wr2", name="WR2", position="WR", team="Z5", bye_week=None, points=90, data_source="sleeper", vorp=45, tier=1),
+        PlayerVorp(player_id="te1", name="TE1", position="TE", team="Z6", bye_week=None, points=80, data_source="sleeper", vorp=40, tier=1),
+        PlayerVorp(player_id="flexrb", name="FlexRB", position="RB", team="Z7", bye_week=None, points=70, data_source="sleeper", vorp=35, tier=1),
+        PlayerVorp(player_id="flexwr", name="FlexWR", position="WR", team="Z8", bye_week=None, points=70, data_source="sleeper", vorp=35, tier=1),
+        PlayerVorp(player_id="k", name="K", position="K", team="Z9", bye_week=None, points=50, data_source="sleeper", vorp=20, tier=1),
+        PlayerVorp(player_id="def", name="DEF", position="DEF", team="Z10", bye_week=None, points=50, data_source="sleeper", vorp=20, tier=1),
+        # The backup that already covers the one TE slot.
+        PlayerVorp(player_id="te2", name="TE2", position="TE", team="Z11", bye_week=None, points=60, data_source="sleeper", vorp=30, tier=2),
+    ]
+    # A third TE, marginally better than the backup already rostered, and
+    # carrying the inflated VORP a thin pool produces.
+    te_redundant = PlayerVorp(player_id="te3", name="TE3", position="TE", team="Y1", bye_week=None, points=62, data_source="sleeper", vorp=31, tier=2)
+    rb_depth = PlayerVorp(player_id="rb4", name="RB4", position="RB", team="Y2", bye_week=None, points=55, data_source="sleeper", vorp=12, tier=3)
+
+    board = [te_redundant, rb_depth]
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS, my_draft_slot=1)
+    assistant.my_drafted_players = starters
+
+    rec = assistant.recommend()
+
+    assert rec.player.player_id == "rb4"
 
 
 def _vorp_player(player_id, position, points, vorp, tier=1):
