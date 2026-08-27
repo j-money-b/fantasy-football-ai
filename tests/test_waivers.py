@@ -241,3 +241,34 @@ def test_format_waiver_report_no_targets():
     text = format_waiver_report([], "Rolling Waivers", faab=False)
 
     assert "No free agents found." in text
+
+
+def test_faab_bids_do_not_reach_the_top_band_on_a_quiet_week():
+    """Found by replaying real 2025 weeks: the bands rank targets against
+    each other, so on a week with nothing good the best of a bad bunch
+    still landed in the top band -- "bid $20-$35" of a $100 season budget
+    for a player worth 1.8 points. Correct ordering, no magnitude."""
+    targets = [_target("a", "RB", 1.8), _target("b", "WR", 1.5), _target("c", "TE", 1.4)]
+
+    bids = faab_bid_ranges(targets, remaining_budget=100)
+
+    assert all(high <= 8 for _low, high in bids.values()), bids
+
+
+def test_faab_bids_still_go_big_for_a_genuinely_valuable_target():
+    targets = [_target("stud", "RB", 12.0), _target("filler", "WR", 1.2)]
+
+    bids = faab_bid_ranges(targets, remaining_budget=100)
+
+    assert bids["stud"] == (20, 35)
+
+
+def test_faab_skips_targets_inside_the_noise_floor():
+    """A sub-point weekly gain is inside any projection's error bars and
+    should not cost money at all -- not even a token bid."""
+    targets = [_target("noise", "RB", 0.4), _target("real", "WR", 9.0)]
+
+    bids = faab_bid_ranges(targets, remaining_budget=100)
+
+    assert "noise" not in bids
+    assert "real" in bids

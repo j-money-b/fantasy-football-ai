@@ -29,6 +29,24 @@ FAAB_WAIVER_TYPE = 2
 # this tool has no visibility into. Tiers beyond the list reuse the last band.
 FAAB_BID_BANDS = [(0.20, 0.35), (0.08, 0.20), (0.02, 0.08)]
 
+# The bands above are RELATIVE -- they rank this week's targets against each
+# other. On a quiet week that is not enough on its own: whoever happens to be
+# best still lands in the top band, so replaying real 2025 weeks produced
+# "bid $20-$35" (a third of a season's budget) for a player worth 1.8 points.
+# Correct ordering, no sense of magnitude -- the same failure the draft side
+# hit when it bought noise-sized edges with real picks.
+#
+# So a target also has to be worth something in absolute terms to reach the
+# top bands. Thresholds are weekly marginal lineup points, matching the units
+# WaiverTarget.marginal_value is already in, and deliberately reuse the
+# judgment already documented in this file: priority_judgment has said "a few
+# points" (3.0) is the bar for spending a waiver priority since it was
+# written. A FAAB budget deserves the same bar.
+WAIVER_WORTH_POINTS = 3.0
+# Below this a "gain" is inside the week-to-week error of any projection and
+# should not cost real money at all.
+WAIVER_NOISE_POINTS = 1.0
+
 # PRD 6.3: flag both over-conservatism (unspent budget at season end is
 # pure waste) and early overspending. These deltas between fraction-of-
 # budget-spent and fraction-of-season-elapsed are a rough pace check, not a
@@ -143,10 +161,16 @@ def faab_bid_ranges(targets, remaining_budget, gap_multiplier=2.0):
 
     result = {}
     for tier_index, tier_targets in enumerate(tiers):
-        low_pct, high_pct = FAAB_BID_BANDS[min(tier_index, len(FAAB_BID_BANDS) - 1)]
-        low, high = round(remaining_budget * low_pct), round(remaining_budget * high_pct)
         for t in tier_targets:
-            result[t.player.player_id] = (low, high)
+            # Relative tier sets the ceiling; absolute value decides whether
+            # this target can actually reach it. A quiet week has no top-band
+            # target in it, however the week's own targets rank against each
+            # other.
+            if t.marginal_value < WAIVER_NOISE_POINTS:
+                continue  # not worth real money -- no bid at all
+            band_index = tier_index if t.marginal_value >= WAIVER_WORTH_POINTS else len(FAAB_BID_BANDS) - 1
+            low_pct, high_pct = FAAB_BID_BANDS[min(band_index, len(FAAB_BID_BANDS) - 1)]
+            result[t.player.player_id] = (round(remaining_budget * low_pct), round(remaining_budget * high_pct))
     return result
 
 
