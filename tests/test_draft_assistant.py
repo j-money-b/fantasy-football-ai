@@ -597,3 +597,53 @@ def test_gap_to_next_turn_is_nonzero_while_on_the_clock(tmp_path):
 
     assert picks_until == 0          # on the clock right now
     assert offsets and offsets[0] > 0  # but the next turn is a real distance away
+
+
+def test_consensus_swap_refuses_a_large_downgrade(tmp_path):
+    # Regression: the swap fired on a 27.6-point downgrade because the two
+    # players shared a tier, then cost a SECOND pick when the better player
+    # was re-drafted a round later and the first was benched.
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    ours = _player("te_ours", "TE", name="Our Board TE", vorp=163.6, tier=5)
+    theirs = _player("te_cons", "TE", name="Consensus TE", vorp=136.0, tier=5)
+    consensus = {"TE": [ConsensusEntry(name="Consensus TE", team="XXX", position="TE",
+                                       raw_stats={}, player_id="te_cons")]}
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", [ours, theirs],
+                               ROSTER_POSITIONS, my_draft_slot=1, consensus_top10=consensus)
+
+    rec = assistant.recommend()
+
+    assert rec.player.player_id == "te_ours"
+    assert any("isn't in FantasyPros' consensus top 10" in r for r in rec.reasons)
+
+
+def test_consensus_swap_still_fires_when_the_alternative_is_close(tmp_path):
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    ours = _player("te_ours", "TE", name="Our Board TE", vorp=163.6, tier=5)
+    theirs = _player("te_cons", "TE", name="Consensus TE", vorp=160.0, tier=5)
+    consensus = {"TE": [ConsensusEntry(name="Consensus TE", team="XXX", position="TE",
+                                       raw_stats={}, player_id="te_cons")]}
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", [ours, theirs],
+                               ROSTER_POSITIONS, my_draft_slot=1, consensus_top10=consensus)
+
+    assert assistant.recommend().player.player_id == "te_cons"
+
+
+def test_near_tied_plans_defer_the_position_nobody_else_is_drafting(tmp_path):
+    # A defense whose plan value is a couple of points ahead must not beat
+    # real depth: that margin is inside the noise band, and DEF costs
+    # nothing to wait on. This is the round-9-defense case.
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    board = (
+        [_player(f"rb{i}", "RB", vorp=250 - 18 * i) for i in range(8)]
+        + [_player(f"wr{i}", "WR", vorp=245 - 18 * i) for i in range(8)]
+        + [_player(f"d{i}", "DEF", vorp=110 - i) for i in range(8)]
+        + [_player(f"k{i}", "K", vorp=80 - i) for i in range(8)]
+        + [_player(f"q{i}", "QB", vorp=300 - 5 * i) for i in range(8)]
+        + [_player(f"t{i}", "TE", vorp=200 - 15 * i) for i in range(8)]
+    )
+    assistant = DraftAssistant(FakeDraftClient([[]]), cache, "draft1", board,
+                               ROSTER_POSITIONS, my_draft_slot=1, total_rosters=10)
+    assistant.picks = [_pick(i, board[i].player_id) for i in range(1, 30)]
+
+    assert assistant.recommend().player.position != "DEF"

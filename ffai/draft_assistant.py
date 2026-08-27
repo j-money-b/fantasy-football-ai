@@ -536,16 +536,26 @@ class DraftAssistant:
             scored.sort(key=lambda pair: (pair[1] > 0, pair[0].vorp), reverse=True)
         else:
             scored = [(p, self._plan_value(p, pools, rates, future_offsets)) for p in options]
-            # Ties are the common case late, when you'll simply end up with
-            # both positions and pick order can't change the final roster.
-            # _wait_cost breaks them by URGENCY -- take the position that
-            # won't still be there next turn, defer the one that will.
-            # VORP is only the last resort, because on its own it hands
-            # every tie to DEF/K (see _wait_cost).
+            # Near-ties are the common case late, when you'll simply end up
+            # with both positions and pick order barely changes the final
+            # roster. Everything within NOISE_BAND_POINTS of the leader is
+            # treated as tied and ranked by URGENCY instead: take the
+            # position that won't still be there next turn, defer the one
+            # that will.
+            #
+            # The band matters as much as the tiebreak. Exact ties alone
+            # left defenses going in round 9 on a TWO POINT plan-value edge
+            # -- real, but a season-long projection gap that small at the
+            # position with the least reliable projections in fantasy is
+            # noise, and chasing it cost a pick that had somewhere better
+            # to be. VORP is only the last resort, because on its own it
+            # hands every tie to DEF/K (see _wait_cost).
+            best_plan = max(value for _player, value in scored)
             scored.sort(
                 key=lambda pair: (
-                    pair[1],
+                    pair[1] >= best_plan - NOISE_BAND_POINTS,
                     self._wait_cost(pair[0], pools, rates, gap_to_next_turn),
+                    pair[1],
                     pair[0].vorp,
                 ),
                 reverse=True,
@@ -569,11 +579,25 @@ class DraftAssistant:
         # DEF has no FantasyPros data at all (which the lenient check
         # treated as "nothing wrong here" instead of "no evidence either
         # way").
+        #
+        # "Comparable" also has to mean comparable in POINTS, not just
+        # tier. Tiers are gap-clustered and can span 30+ points at thin
+        # positions, and without a magnitude guard this swap fired on a
+        # 27.6-point downgrade (Kincaid 163.6 -> Goedert 136.0, same tier,
+        # Goedert consensus-backed). It then cost a second pick: with the
+        # TE slot filled by the weaker player, the better one was still the
+        # biggest available upgrade a round later, so the tool drafted him
+        # too and benched the first. One unguarded swap, two wasted picks.
+        # NOISE_BAND_POINTS is the same "this gap is noise" threshold the
+        # coin-flip note uses -- if the alternative isn't inside it, our
+        # board isn't an outlier, it just disagrees.
         if not self._consensus_backed(top_pick) and top_pick.tier is not None:
             alt = next(
                 (
                     p for p in pools[top_pick.position]
-                    if p.tier == top_pick.tier and self._has_real_consensus_backing(p)
+                    if p.tier == top_pick.tier
+                    and self._has_real_consensus_backing(p)
+                    and abs(top_pick.points - p.points) <= NOISE_BAND_POINTS
                 ),
                 None,
             )
