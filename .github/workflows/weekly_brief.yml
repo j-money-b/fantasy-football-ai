@@ -11,6 +11,15 @@ on:
 
 permissions:
   contents: write
+  issues: write
+
+env:
+  # Who gets @-mentioned on each brief. The mention is what actually
+  # delivers the email: repo-watch notifications can be off or filtered,
+  # but "Participating and @mentions" is on by default and is the setting
+  # people are least likely to have turned off.
+  BRIEF_RECIPIENT: j-money-b
+  BRIEF_THREAD_TITLE: "Weekly briefs"
 
 jobs:
   brief:
@@ -35,3 +44,34 @@ jobs:
           git add brief.md
           git diff --cached --quiet && echo "No changes to commit" || git commit -m "Update weekly brief"
           git push
+
+      # brief.md in the repo is the archive; this is the delivery. Posting
+      # the brief as a comment on one long-lived issue makes GitHub send it
+      # as a notification email, with no SMTP server or app password to
+      # store as a secret. One thread rather than an issue per run so a
+      # season's worth of briefs stays readable in date order.
+      - name: Deliver brief as a notification
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          issue=$(gh issue list --state open --search "$BRIEF_THREAD_TITLE in:title" \
+                    --limit 1 --json number --jq '.[0].number // empty')
+
+          if [ -z "$issue" ]; then
+            url=$(gh issue create \
+                    --title "$BRIEF_THREAD_TITLE" \
+                    --body "Each run of the Weekly Brief workflow posts here. Keep this issue open -- closing it starts a new thread on the next run.")
+            issue="${url##*/}"
+            echo "Created brief thread #$issue"
+          fi
+
+          {
+            echo "@$BRIEF_RECIPIENT"
+            echo
+            cat brief.md
+          } > comment.md
+
+          gh issue comment "$issue" --body-file comment.md
+          echo "Posted brief to issue #$issue"
