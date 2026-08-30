@@ -25,6 +25,11 @@ POSITION_RATE_PRIOR_WEIGHT = 10
 # (their replacement level is computed off a very thin pool).
 STREAMABLE_POSITIONS = {"DEF", "K"}
 
+# Round before which K/DEF are not worth listing as alternatives -- nobody
+# drafts them earlier, so offering them is noise that teaches the reader to
+# ignore the alternatives block entirely.
+STREAMABLE_EARLIEST_ROUND = 8
+
 # A projection gap this small is noise, not a decision. Expressed per game
 # so the band scales with the season and reads in a unit that means
 # something: 0.75 pts/game is under one PPR reception a week, which is well
@@ -42,6 +47,22 @@ NOISE_BAND_POINTS = NOISE_POINTS_PER_GAME * FANTASY_SEASON_GAMES
 
 # How many tied alternatives to name before summarising the rest.
 MAX_NAMED_TIED_ALTERNATIVES = 3
+
+# How far past a player's human ADP we have to be before passing on him is
+# worth calling out (_market_divergence_note). Roughly a round in a 10-team
+# league: inside that, board-vs-market noise is constant and flagging it
+# every pick would train the reader to skip the line.
+ADP_DIVERGENCE_PICKS = 10
+
+# Bounds on how far this table's observed pace may bend the ADP forecast
+# (_table_pace). The clamp is the whole point: unbounded live adaptation is
+# exactly what the old positional-rate model did, and it read RB at 0.517 of
+# all remaining picks off a 24-pick sample. Sample gates stop the opening
+# rounds -- the least representative stretch of any draft -- from moving it.
+MIN_TABLE_PACE = 0.7
+MAX_TABLE_PACE = 1.6
+MIN_PACE_SAMPLE = 20
+MIN_PACE_SAMPLE_AT_POSITION = 5
 
 # Roughly the share of a season a starter at each position misses, from
 # typical NFL games-missed rates (RB ~3.5 games of 17, WR/TE ~2.5, QB ~2,
@@ -104,6 +125,7 @@ class DraftAssistant:
         board_degraded=False,
         consensus_top10=None,
         total_rosters=None,
+        adp_ranks=None,
     ):
         self.client = client
         self.cache = cache
@@ -114,6 +136,21 @@ class DraftAssistant:
         self.board_degraded = board_degraded
         self.consensus_top10 = consensus_top10 or {}
         self.total_rosters = total_rosters  # optional: enables the "picks until your turn" scarcity check
+
+        # player_id -> the pick number human tables take him at (ffai/adp.py).
+        # This is what the rest-of-draft forecast reads; see
+        # _expected_available for why a per-player ADP replaced the
+        # positional-rate model that used to do this job.
+        self.adp_ranks = dict(adp_ranks or {})
+        if self.adp_ranks:
+            # Players outside the ADP sample are, by construction, ones human
+            # tables don't reach in the rounds it covers. Rank them after
+            # everyone who has a real ADP, in board order, so the forecast
+            # still orders them sensibly rather than treating them as
+            # available forever (which would make every position look deep).
+            horizon = max(self.adp_ranks.values())
+            for offset, player in enumerate(board, start=1):
+                self.adp_ranks.setdefault(player.player_id, horizon + offset)
 
         self.picks = []  # raw pick dicts from Sleeper, in pick_no order
         self.drafted_player_ids = set()
@@ -231,7 +268,134 @@ class DraftAssistant:
             return 0
         return int(round(picks_until * rates.get(position, 0.0)))
 
-    def _wait_cost(self, candidate, pools, rates, picks_until):
+    def _current_pick_no(self):
+        """The pick number on the clock right now (1-based)."""
+        return len(self.picks) + 1
+
+    def _my_next_pick_no(self, picks_until):
+        return self._current_pick_no() + (picks_until or 0)
+
+    def _expected_available(self, position, at_pick, pools, rates, skip=0):
+        """Best player at `position` still expected to be on the board at
+        absolute pick number `at_pick` -- `skip` of them past the top, for
+        when a plan has already spent earlier picks at this position.
+
+        Forecast from per-player human ADP, NOT from an observed positional
+        draft rate. The rate model this replaces was the single worst number
+        in the recommender, for two reasons that only show up together:
+
+        1. It measured the rate from picks SO FAR and extrapolated it over
+           the whole remaining draft. But positional mix is nowhere near
+           stationary -- ADP for this league's shape has RB going 12, 5, 7,
+           5, 5, 5, 2 per 20 picks while K/DEF go 0, 0, 0, 0, 3, 3, 6. The
+           first two rounds of any draft are RB/WR-heavy by construction, so
+           the early sample is maximally unrepresentative of the rest.
+        2. POSITION_RATE_PRIOR_WEIGHT (10) is swamped by pick 24, and the
+           prior was the accurate half: in a real mock this computed
+           (15 + 10*0.259)/(24+10) = 0.517 for RB -- i.e. that half of every
+           remaining pick in the draft would be a running back, against a
+           true rate of 0.293 (41 RBs in 140 picks). Extrapolated 111 picks
+           ahead that assumed 57 more RBs would go, more than go in an
+           entire real draft, so the rollout believed the best RB left at
+           the last turn was ~RB#47 (James Conner, 57.2 pts).
+
+        That fake cliff then fed _roster_value's injury penalty, which
+        charges a roster whose RB2 has no cover -- so hoarding RBs scored as
+        insurance against a shortage that was never going to happen. In the
+        mock it took Breece Hall (211.0) over Nico Collins (262.0) with both
+        WR slots still empty. Sweeping the rate showed the recommendation
+        flipping at ~0.47: every value from the true 0.29 up to 0.45 picks
+        Collins, and only the inflated estimate picks Hall.
+
+        ADP fixes the estimate at its source rather than patching the
+        extrapolation. It is per-player, already the shape of a real draft,
+        and monotone in `at_pick`, which also removes the step-function
+        instability that made the same comparison read 98 pts one pick and
+        28 the next.
+
+        The rate model is kept as the fallback for when ADP is unavailable
+        (it's a scraped third-party source, so R2/R3 apply): a degraded
+        forecast still beats no forecast, and its failure mode is now
+        documented rather than silent."""
+        players = pools.get(position, [])
+        if self.adp_ranks:
+            gone = round(self._adp_gone_by(position, players, at_pick) * self._table_pace(position))
+            remaining = players[gone:]
+        else:
+            gone = self._expected_taken_by_next_turn(
+                position, at_pick - self._current_pick_no(), rates
+            )
+            remaining = players[gone:]
+        return remaining[skip] if skip < len(remaining) else None
+
+    def _adp_gone_by(self, position, players, at_pick):
+        """How many of `players` human ADP says are off the board by `at_pick`."""
+        return sum(1 for p in players if self.adp_ranks[p.player_id] < at_pick)
+
+    def _table_pace(self, position):
+        """How much faster (or slower) THIS table is clearing `position` than
+        human ADP says it should be, as a bounded multiplier.
+
+        Pure ADP is the right prior but the wrong final answer, because a
+        given table is not the average of 8,000 drafts. Replaying a real
+        Sleeper mock whose bots cleared RBs far faster than humans do, the
+        unadjusted ADP forecast under-read that scarcity and ended up
+        starting a 170-point RB2 where the old model's 211-point one was
+        better -- the one case where the discredited rate model still won.
+
+        So: adapt, but on a leash. The multiplier is anchored to ADP's
+        absolute counts rather than being a free-running rate, and clamped,
+        which is precisely what the old model lacked -- it could and did run
+        to 0.517/pick for RB off a 24-pick sample. At the ceiling here the
+        implied RB rate is ~0.47, still below the value that produced the
+        four-RB draft, and it cannot compound beyond that no matter how
+        lopsided the opening is. MIN_PACE_SAMPLE keeps a handful of early
+        picks from moving it at all, which is where the old estimator did
+        its worst damage."""
+        if len(self.picks) < MIN_PACE_SAMPLE:
+            return 1.0
+
+        here = self._current_pick_no()
+        expected = sum(
+            1 for pid, rank in self.adp_ranks.items()
+            if rank < here and pid in self._by_player_id
+            and self._by_player_id[pid].position == position
+        )
+        if expected < MIN_PACE_SAMPLE_AT_POSITION:
+            return 1.0
+
+        # Counted off self.picks, the same record every other forecast method
+        # reads, rather than drafted_player_ids -- the two are kept in step by
+        # poll_once, but only one of them is the ordered source of truth.
+        actual = sum(
+            1 for pick in self.picks
+            if pick.get("player_id") in self._by_player_id
+            and self._by_player_id[pick["player_id"]].position == position
+        )
+        return max(MIN_TABLE_PACE, min(MAX_TABLE_PACE, actual / expected))
+
+    def _expected_gone_by(self, position, pools, at_pick, rates):
+        """How many at `position` are expected off the board by `at_pick` --
+        the count behind the "cost of waiting" reason.
+
+        Applies _table_pace for the same reason _expected_available does: the
+        number the tool PRINTS has to be the number it actually reasoned
+        from, or the explanation is describing a different forecast than the
+        one that made the pick."""
+        players = pools.get(position, [])
+        if self.adp_ranks:
+            return min(
+                len(players),
+                round(self._adp_gone_by(position, players, at_pick) * self._table_pace(position)),
+            )
+        return min(
+            len(players),
+            self._expected_taken_by_next_turn(
+                position, at_pick - self._current_pick_no(), rates
+            ),
+        )
+
+    def _wait_cost(self, candidate, pools, rates, my_next, gap):
         """How many projected points you lose at `candidate`'s position by
         waiting one turn: the gap between the best there now and the best
         still expected to be there at your next turn.
@@ -253,14 +417,13 @@ class DraftAssistant:
         their expected loss from waiting is ~0 and they sink to last --
         which is precisely why you can afford to wait on them. Positions
         that are actually evaporating keep a positive cost and rise."""
-        if not picks_until:
+        if not gap:
             return 0.0
 
-        same_position = pools.get(candidate.position, [])
-        expected_gone = self._expected_taken_by_next_turn(candidate.position, picks_until, rates)
-        if expected_gone >= len(same_position):
+        fallback = self._expected_available(candidate.position, my_next + gap, pools, rates)
+        if fallback is None:
             return round(candidate.points, 2)  # position may be picked clean
-        return round(max(0.0, candidate.points - same_position[expected_gone].points), 2)
+        return round(max(0.0, candidate.points - fallback.points), 2)
 
     def _my_future_pick_offsets(self, picks_until):
         """How many picks after this draft_slot's next turn each of its
@@ -297,7 +460,21 @@ class DraftAssistant:
 
         Self-limiting for the same reason _depth_value is: once a position
         has one competent backup, the next one never enters the lineup in
-        either the healthy or the injured case, so it changes nothing."""
+        either the healthy or the injured case, so it changes nothing.
+
+        KNOWN OVERSTATEMENT, measured and deliberately left in place: the
+        depleted lineup gets no waiver replacement, so an injured starter is
+        scored as if the slot were forfeited. Only 140 of 600+ draftable
+        players go in a 10-team league, so the real cost is the gap to a
+        freely available player. This makes backups look better than they
+        are -- on a half-human mock it drafted a QB2 that added 0.0 points to
+        its starting lineup and 36.4 to its score. Crediting replacement
+        level instead was tried and measured +1.8 / +2.9 healthy points on
+        two opponent models but -17.3 on a third, i.e. not a clear win, and
+        it was reverted rather than shipped on ambiguous evidence. Worth
+        revisiting with time to tune the floor (replacement level is
+        probably too generous a stand-in for what waivers actually offer
+        mid-season)."""
         lineup = optimize_lineup(roster, self.roster_positions)
         healthy = lineup.total_points
 
@@ -315,7 +492,7 @@ class DraftAssistant:
 
         return round(healthy - penalty, 2)
 
-    def _plan_value(self, first_choice, pools, rates, future_offsets):
+    def _plan_value(self, first_choice, pools, rates, my_next, future_offsets):
         """Projected total starting-lineup points of the roster you end the
         draft with if you take `first_choice` now and then keep taking
         whatever helps most at each of your remaining turns.
@@ -331,10 +508,12 @@ class DraftAssistant:
         -- the cost isn't in any one deferral, it's in the compounding.
 
         The rollout is greedy per future turn, and the estimate of who'll
-        still be there uses _position_draft_rates, so this is an
+        still be there comes from _expected_available, so this is an
         approximation of the future, not a forecast of it. It doesn't need
         to be exact: it only has to rank a handful of positions correctly
-        against each other right now."""
+        against each other right now. It does need to be roughly UNBIASED
+        across positions, which is where the old rate model failed -- see
+        _expected_available."""
         roster = list(self.my_drafted_players) + [first_choice]
         taken_by_me = Counter({first_choice.position: 1})
 
@@ -342,11 +521,12 @@ class DraftAssistant:
             current = self._roster_value(roster)
             best_candidate = None
             best_gain = None
-            for position, players in pools.items():
-                index = self._expected_taken_by_next_turn(position, elapsed, rates) + taken_by_me[position]
-                if index >= len(players):
+            for position in pools:
+                candidate = self._expected_available(
+                    position, my_next + elapsed, pools, rates, skip=taken_by_me[position]
+                )
+                if candidate is None:
                     continue
-                candidate = players[index]
                 gain = self._roster_value(roster + [candidate]) - current
                 if best_gain is None or gain > best_gain:
                     best_gain, best_candidate = gain, candidate
@@ -516,6 +696,7 @@ class DraftAssistant:
             pools[p.position].append(p)
 
         picks_until = self._picks_until_my_turn()
+        my_next = self._my_next_pick_no(picks_until)
         rates = self._position_draft_rates()
         future_offsets = self._my_future_pick_offsets(picks_until)
 
@@ -594,7 +775,7 @@ class DraftAssistant:
             scored = [(p, contribution(p)) for p in options]
             scored.sort(key=lambda pair: (pair[1], pair[0].vorp), reverse=True)
         else:
-            scored = [(p, self._plan_value(p, pools, rates, future_offsets)) for p in options]
+            scored = [(p, self._plan_value(p, pools, rates, my_next, future_offsets)) for p in options]
             # Near-ties are the common case late, when you'll simply end up
             # with both positions and pick order barely changes the final
             # roster. Everything within NOISE_BAND_POINTS of the leader is
@@ -613,7 +794,7 @@ class DraftAssistant:
             scored.sort(
                 key=lambda pair: (
                     pair[1] >= best_plan - NOISE_BAND_POINTS,
-                    self._wait_cost(pair[0], pools, rates, gap_to_next_turn),
+                    self._wait_cost(pair[0], pools, rates, my_next, gap_to_next_turn),
                     pair[1],
                     pair[0].vorp,
                 ),
@@ -701,24 +882,38 @@ class DraftAssistant:
         if future_offsets and len(scored) > 1:
             runner_up, runner_up_value = scored[1]
             edge = scored[0][1] - runner_up_value
-            if edge > 0:
+            if edge > NOISE_BAND_POINTS:
                 reasons.append(
                     f"Playing out the rest of your draft from here, taking {best.position} now projects to "
                     f"a {edge:.0f} pt better final lineup than going {runner_up.position} "
                     f"({runner_up.name}) -- because of what's likely to still be there at your later picks, "
                     f"not just who's best right now."
                 )
+            elif edge > 0:
+                # Inside the noise band the ranking has ALREADY treated these
+                # two as tied and broken them on urgency (see the sort above),
+                # so reporting the raw gap as though it decided the pick
+                # contradicts the logic that actually made it. A real mock
+                # printed "a 5 pt better final lineup" for a 3.0-point gap at
+                # a band of 12.75, in the same voice it uses for 90-point
+                # edges -- the reader has no way to tell those apart.
+                reasons.append(
+                    f"{best.position} and {runner_up.position} ({runner_up.name}) project to "
+                    f"within {edge:.0f} pts of the same final lineup -- too close to call, so this "
+                    f"comes down to which one won't still be there at your next turn ({best.position}). "
+                    f"Taking {runner_up.name} instead is defensible."
+                )
 
         if gap_to_next_turn:
-            expected_gone = self._expected_taken_by_next_turn(best.position, gap_to_next_turn, rates)
-            same_position = pools[best.position]
-            if expected_gone >= len(same_position):
+            next_turn_pick = my_next + gap_to_next_turn
+            expected_gone = self._expected_gone_by(best.position, pools, next_turn_pick, rates)
+            fallback = self._expected_available(best.position, next_turn_pick, pools, rates)
+            if fallback is None:
                 reasons.append(
-                    f"Cost of waiting: at the rate {best.position}s are coming off the board, the position "
-                    f"may be picked clean before your next turn ({gap_to_next_turn} picks away)."
+                    f"Cost of waiting: on human ADP the {best.position} board may be picked clean "
+                    f"before your next turn ({gap_to_next_turn} picks away)."
                 )
             elif expected_gone > 0:
-                fallback = same_position[expected_gone]
                 drop = best.points - fallback.points
                 if drop > 0:
                     reasons.append(
@@ -728,7 +923,15 @@ class DraftAssistant:
                     )
 
         reasons.extend(self._shared_reasons(best))
-        return Recommendation(player=best, reasons=reasons, degraded=False, data_source=best.data_source)
+
+        divergence = self._market_divergence_note(best, available)
+        if divergence:
+            reasons.append(divergence)
+
+        return Recommendation(
+            player=best, reasons=reasons, degraded=False, data_source=best.data_source,
+            alternatives=self._alternatives(best, pools, marginal),
+        )
 
     def _tied_alternatives(self, best, pools):
         """Still-available players at `best`'s position whose projection is
@@ -760,6 +963,117 @@ class DraftAssistant:
             f"{NOISE_POINTS_PER_GAME:g} pts/game of {best.name} -- inside the margin of error, so "
             f"any of them is a defensible pick here. {best.name} is the narrow edge, not a verdict."
         )
+
+    def _market_divergence_note(self, best, available):
+        """Name the best player the market rates far above where our board
+        does, when we're passing on him right here.
+
+        A projection-driven board will sometimes disagree with human ADP by
+        a whole round or more, and that disagreement is legitimate -- it's
+        most of the tool's edge. What isn't legitimate is making it
+        SILENTLY. In a real mock our board had Ashton Jeanty at RB12 (both
+        Sleeper and FantasyPros' consensus put him outside the top 10 at the
+        position) while human ADP took him 14th overall; he simply never
+        appeared in a recommendation, and the reader had no way to tell an
+        active call from an oversight. Say it out loud so the disagreement
+        can be judged, the same way the FantasyPros consensus note already
+        does for our own outliers."""
+        if not self.adp_ranks:
+            return None
+
+        here = self._current_pick_no()
+        reaches = [
+            p for p in available
+            if p.player_id != best.player_id
+            and self.adp_ranks.get(p.player_id, here) <= here - ADP_DIVERGENCE_PICKS
+            # Only a gap our own board considers REAL is a disagreement worth
+            # reporting. Without this the note fired on players inside the
+            # coin-flip band (228 vs 229 pts) -- where "we rate him lower" is
+            # not a claim we're making -- and duplicated the tie note that had
+            # already listed them as interchangeable.
+            and best.points - p.points > NOISE_BAND_POINTS
+        ]
+        if not reaches:
+            return None
+
+        # The one the market is highest on, not the one our board likes most:
+        # the question this answers is "who is everyone else taking here?"
+        headline = min(reaches, key=lambda p: self.adp_ranks[p.player_id])
+        behind = here - self.adp_ranks[headline.player_id]
+        return (
+            f"Passing on {headline.name} ({headline.position}), who human drafts take around pick "
+            f"{self.adp_ranks[headline.player_id]:.0f} -- {behind:.0f} picks ago. Our projection has "
+            f"him at {headline.points:.0f} pts (VORP {headline.vorp:+.1f}), below {best.name}'s "
+            f"{best.points:.0f}. That's a real disagreement with the market, not an oversight -- "
+            f"but it's our board against the room, so weigh it."
+        )
+
+    def _alternatives(self, best, pools, marginal):
+        """Best available at every position that still has an EMPTY starting
+        slot, so the reader can overrule the recommendation without having to
+        go hunting on the Sleeper board.
+
+        This exists because a single recommendation is a bad interface for a
+        user who does not know football well. Told only "take this TE", the
+        honest options are to obey or to fall back on the two heuristics a
+        newcomer actually has -- highest projected number, or most familiar
+        name -- and both are worse than the board. Name recognition in
+        particular is a trap the projections already price in: the well-known
+        player is exactly the one whose price the market has bid up.
+
+        So each line carries the two things a name cannot tell you: what we
+        project, and where the market takes him. A player still on the board
+        past his ADP is one the room has passed on and we have not -- the
+        "sneaky" pick, flagged explicitly rather than left for the reader to
+        infer."""
+        lines = []
+        here = self._current_pick_no()
+        # K/DEF technically have an empty starting slot from pick 1, but
+        # offering them in round 2 is noise that trains the reader to skip
+        # this whole block. They only become a real option once the rounds
+        # nobody drafts them in are behind us.
+        late = self.total_rosters and here > self.total_rosters * STREAMABLE_EARLIEST_ROUND
+        for position in ("QB", "RB", "WR", "TE", "K", "DEF"):
+            if position in STREAMABLE_POSITIONS and not late:
+                continue
+            players = pools.get(position, [])
+            if not players:
+                continue
+            top = players[0]
+            if top.player_id == best.player_id or marginal(top) <= 0:
+                continue  # already the pick, or wouldn't crack the lineup
+
+            # The value play at this position: whoever we rate closest to the
+            # top man while the market rates him materially later. Only worth
+            # naming when it's someone OTHER than the obvious pick.
+            sneaky = None
+            if self.adp_ranks:
+                falling = [
+                    p for p in players[:8]
+                    if p.player_id != top.player_id
+                    and self.adp_ranks.get(p.player_id, 0) < here
+                    and top.points - p.points <= NOISE_BAND_POINTS
+                ]
+                if falling:
+                    sneaky = max(falling, key=lambda p: here - self.adp_ranks[p.player_id])
+
+            lines.append(f"{position:4s} {top.name} -- {top.points:.0f} pts{self._market_tag(top, here)}")
+            if sneaky is not None:
+                lines.append(
+                    f"       value alt: {sneaky.name} -- {sneaky.points:.0f} pts"
+                    f"{self._market_tag(sneaky, here)}, "
+                    f"within {top.points - sneaky.points:.0f} pts of {top.name.split()[-1]}"
+                )
+        return lines
+
+    def _market_tag(self, player, here):
+        """Where the room takes this player, relative to where we are now."""
+        rank = self.adp_ranks.get(player.player_id)
+        if not rank:
+            return ""
+        if rank < here:
+            return f", MARKET PASSED HIM (goes ~{rank:.0f}, we're at {here})"
+        return f", market ~pick {rank:.0f}"
 
     def _shared_reasons(self, best):
         reasons = []
@@ -811,4 +1125,11 @@ def format_recommendation(recommendation):
     lines = [f"Recommended pick: {recommendation.player.name} ({recommendation.player.position}, {recommendation.player.team})"]
     for reason in recommendation.reasons:
         lines.append(f"  - {reason}")
+    if recommendation.alternatives:
+        # Printed for every pick, not just close ones: the reader overruling
+        # this needs the same information whether or not the tool thought the
+        # call was close.
+        lines.append("  IF YOU DISAGREE -- best available where you still have an empty starting slot:")
+        for alt in recommendation.alternatives:
+            lines.append(f"    {alt}")
     return "\n".join(lines)

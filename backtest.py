@@ -15,10 +15,21 @@ against a table running the one strategy it exists to beat, on a board
 that strategy had itself distorted. Pass a picks JSON as argv[1] to
 replay a specific draft instead.
 
-Two opponent models remain because ADP fixes what order players go in,
-not how a manager reacts to their own roster. "adp" follows the order
-blindly; "needs" stops loading up on a position once it has enough and
-leaves K/DEF until late.
+Three opponent models, because ADP fixes what order players go in, not
+how a manager reacts to their own roster or to the table. "adp" follows
+the order blindly; "needs" stops loading up on a position once it has
+enough and leaves K/DEF until late; "runs" adds positional herding.
+
+"runs" exists because the first two are both ADP-SHAPED, and that blind
+spot hid a real bug. The recommender used to forecast the rest of the
+draft by extrapolating this draft's own observed positional mix, which is
+accurate exactly when the table follows ADP -- so the harness graded the
+forecast against the one opponent distribution it could not get wrong,
+and reported the tool beating every baseline in 10/10 slots while a live
+Sleeper mock had it take four running backs and no wide receiver. Under
+"runs" the table chases whatever position is already going, the observed
+mix diverges from ADP, and the failure reproduces. Any future change to
+the forecast should be judged on this model, not just the friendly two.
 """
 import json
 import sys
@@ -41,6 +52,17 @@ from ffai.vorp import build_tiers, compute_replacement_levels, compute_vorp
 # stop taking more, and how late they leave the streamable slots.
 HUMAN_POSITION_CAPS = {"QB": 2, "RB": 5, "WR": 5, "TE": 2, "K": 1, "DEF": 1}
 HUMAN_LATE_ROUND_POSITIONS = {"K": 9, "DEF": 8}
+
+# Positional-run herding, for the "runs" opponent model. Window and
+# threshold match DraftAssistant.detect_positional_run so the table the
+# harness builds is running the behaviour the tool claims to detect.
+# RUN_ADP_PULL is how many ADP slots a manager will reach ahead to chase a
+# run: 12 is roughly a round in a 10-team league, enough to bend the
+# observed positional mix well away from ADP without making the table
+# absurd.
+RUN_WINDOW = 5
+RUN_THRESHOLD = 3
+RUN_ADP_PULL = 12
 
 
 def load_board():
@@ -91,9 +113,20 @@ def slot_for_pick(pick_no, total_rosters):
 
 
 def simulate(strategy, adp_ids, board, roster_positions, total_rosters, consensus,
-             client, cache, my_slot, rounds, opponents="adp"):
+             client, cache, my_slot, rounds, opponents="adp", forecast_adp_ids=None):
+    """`adp_ids` orders the TABLE. `forecast_adp_ids` is what the tool is
+    allowed to believe about that order, and they are deliberately not the
+    same argument.
+
+    In replay mode `adp_ids` is the pick order of a draft that already
+    happened. Handing that to the recommender as its ADP would give it
+    perfect foreknowledge of every pick the table is about to make, which is
+    not a backtest -- it grades the tool on a draft it can see the end of.
+    Defaults to `adp_ids` for the ordinary case, where the order genuinely IS
+    public human ADP and there is nothing to leak."""
     adp_rank = {pid: i for i, pid in enumerate(adp_ids)}
     vorp_rank = {p.player_id: i for i, p in enumerate(sorted(board, key=lambda p: p.vorp, reverse=True))}
+    board_by_id = {p.player_id: p for p in board}
 
     def adp_key(p):
         return adp_rank.get(p.player_id, 10_000 + vorp_rank[p.player_id])
@@ -101,6 +134,10 @@ def simulate(strategy, adp_ids, board, roster_positions, total_rosters, consensu
     assistant = DraftAssistant(
         client, cache, "sim", board, roster_positions, my_slot,
         board_degraded=False, consensus_top10=consensus, total_rosters=total_rosters,
+        adp_ranks={
+            player_id: rank
+            for rank, player_id in enumerate(forecast_adp_ids or adp_ids, start=1)
+        },
     )
 
     drafted = set()
@@ -109,18 +146,37 @@ def simulate(strategy, adp_ids, board, roster_positions, total_rosters, consensu
     picks = []
     opponent_rosters = {slot: Counter() for slot in range(1, total_rosters + 1)}
 
+    def running_position():
+        """The position the table is currently chasing, if any -- same
+        window/threshold the recommender uses to call a run out loud."""
+        recent = [
+            board_by_id[pk["player_id"]].position
+            for pk in picks[-RUN_WINDOW:]
+            if pk["player_id"] in board_by_id
+        ]
+        if not recent:
+            return None
+        position, count = Counter(recent).most_common(1)[0]
+        return position if count >= RUN_THRESHOLD else None
+
     def pick_for_opponent(slot, round_no):
+        chasing = running_position() if opponents == "runs" else None
         best = None
         best_key = None
         for p in board:
             if p.player_id in drafted:
                 continue
-            if opponents == "needs":
+            if opponents in ("needs", "runs"):
                 if opponent_rosters[slot][p.position] >= HUMAN_POSITION_CAPS.get(p.position, 99):
                     continue
                 if round_no < HUMAN_LATE_ROUND_POSITIONS.get(p.position, 0):
                     continue
             key = adp_key(p)
+            # Herding: a manager watching a position empty out reaches for
+            # it ahead of ADP. Deterministic rather than sampled so runs are
+            # reproducible between harness invocations.
+            if chasing is not None and p.position == chasing:
+                key -= RUN_ADP_PULL
             if best_key is None or key < best_key:
                 best, best_key = p, key
         return best
@@ -227,22 +283,28 @@ def main():
     # the tool against the strategy it exists to beat, on a board shaped by
     # that same strategy. ADP is 7k+ real human drafts at this league's exact
     # shape, which is the table the tool will actually face.
+    # What the tool is allowed to believe about the table is ALWAYS public
+    # human ADP, whichever order the table itself is running -- see simulate().
+    forecast_adp_ids, stale, meta = fetch_adp(cache, players_raw, teams=total_rosters, season=season)
+    adp_label = (
+        f"human ADP ({meta.get('total_drafts')} {meta.get('type')} drafts, "
+        f"{meta.get('teams')}-team, {meta.get('start_date')}..{meta.get('end_date')})"
+        + (" [STALE CACHE]" if stale else "")
+    )
+
     if picks_path:
         real_picks = sorted(json.load(open(picks_path)), key=lambda p: p["pick_no"])
         adp_ids = [p["player_id"] for p in real_picks]
         order_label = f"single draft replay ({picks_path}, {len(adp_ids)} picks)"
     else:
-        adp_ids, stale, meta = fetch_adp(cache, players_raw, teams=total_rosters, season=season)
-        order_label = (
-            f"human ADP ({meta.get('total_drafts')} {meta.get('type')} drafts, "
-            f"{meta.get('teams')}-team, {meta.get('start_date')}..{meta.get('end_date')})"
-            + (" [STALE CACHE]" if stale else "")
-        )
+        adp_ids = forecast_adp_ids
+        order_label = adp_label
 
     print(f"{total_rosters} teams, {rounds} rounds, roster {roster_positions}")
-    print(f"pick order: {order_label}\n")
+    print(f"pick order: {order_label}")
+    print(f"tool's forecast reads: {adp_label}\n")
 
-    for opponents in ("adp", "needs"):
+    for opponents in ("adp", "needs", "runs"):
         print(f"=== opponent model: {opponents} ===")
         results = {}
         for strategy in ("tool", "adp", "points+need", "points"):
@@ -251,6 +313,7 @@ def main():
                 roster, _lineup, my_picks = simulate(
                     strategy, adp_ids, board, roster_positions, total_rosters, consensus,
                     client, cache, my_slot, rounds, opponents=opponents,
+                    forecast_adp_ids=forecast_adp_ids,
                 )
                 healthy, expected = score_roster(roster, roster_positions)
                 healthy_totals.append(healthy)

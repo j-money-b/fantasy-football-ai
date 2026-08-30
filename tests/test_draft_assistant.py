@@ -1,5 +1,5 @@
 from ffai.cache import Cache
-from ffai.draft_assistant import DraftAssistant, format_recommendation
+from ffai.draft_assistant import MAX_TABLE_PACE, DraftAssistant, format_recommendation
 from ffai.lineup import optimize_lineup
 from ffai.models import PlayerVorp
 from ffai.projections import ConsensusEntry
@@ -633,8 +633,10 @@ def test_wait_cost_is_zero_for_positions_nobody_is_drafting(tmp_path):
     pools = {"DEF": defenses, "RB": backs}
     rates = {"DEF": 0.0, "RB": 0.3}
 
-    assert assistant._wait_cost(defenses[0], pools, rates, picks_until=10) == 0.0
-    assert assistant._wait_cost(backs[0], pools, rates, picks_until=10) > 0.0
+    # No adp_ranks passed, so this exercises the rate-model fallback path.
+    my_next = assistant._my_next_pick_no(0)
+    assert assistant._wait_cost(defenses[0], pools, rates, my_next, gap=10) == 0.0
+    assert assistant._wait_cost(backs[0], pools, rates, my_next, gap=10) > 0.0
 
 
 def test_gap_to_next_turn_is_nonzero_while_on_the_clock(tmp_path):
@@ -702,3 +704,117 @@ def test_near_tied_plans_defer_the_position_nobody_else_is_drafting(tmp_path):
     assistant.picks = [_pick(i, board[i].player_id) for i in range(1, 30)]
 
     assert assistant.recommend().player.position != "DEF"
+
+
+def test_forecast_does_not_extrapolate_an_early_draft_positional_run(tmp_path):
+    """Regression: the rest-of-draft forecast used to be an observed
+    positional RATE extrapolated over every remaining pick.
+
+    Rounds 1-2 of any draft are RB/WR-heavy by construction, so that
+    estimate read a structural feature of the opening as if it described
+    the whole draft. In a real 10-team mock it computed RB = 0.517 -- half
+    of every remaining pick -- against a true rate of 0.293, then assumed
+    57 more RBs would go before the last turn, more than go in a full
+    draft. The invented cliff fed _roster_value's injury penalty, so
+    hoarding RBs scored as insurance and the tool took a 211-point RB over
+    a 262-point WR with both WR slots empty.
+
+    ADP is per-player and already draft-shaped, so a lopsided opening
+    cannot inflate it. Pin that: an RB run through the early picks must not
+    make the forecast believe RBs will keep going at that rate."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    backs = [_player(f"rb{i}", "RB", vorp=250 - 3 * i) for i in range(40)]
+    receivers = [_player(f"wr{i}", "WR", vorp=250 - 3 * i) for i in range(40)]
+    board = backs + receivers
+    # Human ADP: RBs and WRs alternate, i.e. the position mix is even.
+    adp_ranks = {}
+    for i in range(40):
+        adp_ranks[f"rb{i}"] = 2 * i + 1
+        adp_ranks[f"wr{i}"] = 2 * i + 2
+
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS,
+        my_draft_slot=1, total_rosters=10, adp_ranks=adp_ranks,
+    )
+    # An all-RB opening: exactly the sample that used to poison the rate.
+    assistant.picks = [_pick(i + 1, f"rb{i}", draft_slot=2) for i in range(20)]
+    pools = {"RB": backs[20:], "WR": receivers}
+
+    # 20 picks ahead, ADP says ~10 more RBs go. The table has been taking
+    # nothing but RBs, so _table_pace is allowed to raise that -- but only to
+    # its clamp, nowhere near the 20 an unbounded rate would have projected.
+    gone = assistant._expected_gone_by("RB", pools, at_pick=41, rates={})
+    assert gone <= 10 * MAX_TABLE_PACE + 1, f"forecast over-reads the early RB run ({gone} gone)"
+
+    # The bound has to actually bind here, or this test would pass just as
+    # well with no clamp at all.
+    assert assistant._table_pace("RB") == MAX_TABLE_PACE
+
+    # And the forecast the ROLLOUT reads must agree with the number above --
+    # the printed reason and the reasoning were allowed to diverge once.
+    forecast = assistant._expected_available("RB", at_pick=41, pools=pools, rates={})
+    assert forecast is pools["RB"][gone]
+
+    # Finally, the rate model this replaced must be the thing that got it
+    # wrong, or this test is not pinning what it claims to.
+    rates = assistant._position_draft_rates()
+    assert rates["RB"] > 0.45
+
+
+def test_forecast_is_stable_when_one_player_leaves_the_board(tmp_path):
+    """Regression: plan value used to be a step function of a rate that
+    moved every pick, so removing a single WR swung the RB-vs-WR comparison
+    from 98 points to 28 between consecutive picks -- a number the tool
+    printed to the point in both cases. ADP-based availability is monotone
+    in the pick number, so one pick cannot move it by that much."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    backs = [_player(f"rb{i}", "RB", vorp=250 - 4 * i) for i in range(30)]
+    receivers = [_player(f"wr{i}", "WR", vorp=252 - 4 * i) for i in range(30)]
+    board = backs + receivers
+    adp_ranks = {}
+    for i in range(30):
+        adp_ranks[f"rb{i}"] = 2 * i + 1
+        adp_ranks[f"wr{i}"] = 2 * i + 2
+
+    def plan_gap(picks):
+        assistant = DraftAssistant(
+            FakeDraftClient([[]]), cache, "draft1", board, ROSTER_POSITIONS,
+            my_draft_slot=1, total_rosters=10, adp_ranks=adp_ranks,
+        )
+        assistant.picks = picks
+        drafted = {p["player_id"] for p in picks}
+        pools = {
+            "RB": [p for p in backs if p.player_id not in drafted],
+            "WR": [p for p in receivers if p.player_id not in drafted],
+        }
+        picks_until = assistant._picks_until_my_turn()
+        my_next = assistant._my_next_pick_no(picks_until)
+        offsets = assistant._my_future_pick_offsets(picks_until)
+        rates = assistant._position_draft_rates()
+        rb = assistant._plan_value(pools["RB"][0], pools, rates, my_next, offsets)
+        wr = assistant._plan_value(pools["WR"][0], pools, rates, my_next, offsets)
+        return rb - wr
+
+    before = [_pick(i + 1, f"rb{i}", draft_slot=2) for i in range(14)]
+    after = before + [_pick(15, "wr0", draft_slot=2)]
+
+    swing = abs(plan_gap(after) - plan_gap(before))
+    assert swing < 40, f"one pick moved the position comparison by {swing:.0f} pts"
+
+
+def test_falls_back_to_the_rate_model_when_adp_is_unavailable(tmp_path):
+    """ADP is a scraped third-party source, so losing it must degrade the
+    forecast rather than switch it off (PRD R2/R3)."""
+    cache = Cache(db_path=str(tmp_path / "cache.sqlite3"))
+    backs = [_player(f"rb{i}", "RB", vorp=250 - 5 * i) for i in range(20)]
+    assistant = DraftAssistant(
+        FakeDraftClient([[]]), cache, "draft1", backs, ROSTER_POSITIONS,
+        my_draft_slot=1, total_rosters=10, adp_ranks=None,
+    )
+    assistant.picks = [_pick(i + 1, f"rb{i}", draft_slot=2) for i in range(5)]
+    pools = {"RB": backs[5:]}
+    rates = assistant._position_draft_rates()
+
+    fallback = assistant._expected_available("RB", at_pick=16, pools=pools, rates=rates)
+    assert fallback is not None
+    assert fallback.player_id != pools["RB"][0].player_id  # some depletion assumed

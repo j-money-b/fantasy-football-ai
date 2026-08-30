@@ -32,6 +32,7 @@ class Recommendation:
     reasons: list  # list[str]
     degraded: bool
     data_source: str
+    alternatives: list = field(default_factory=list)  # list[str], best available per open slot
 
 
 @dataclass

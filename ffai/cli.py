@@ -5,6 +5,7 @@ import sys
 import time
 from pathlib import Path
 
+from ffai.adp import AdpFetchError, fetch_adp
 from ffai.brief import render_brief_markdown
 from ffai.byes import load_bye_weeks
 from ffai.cache import Cache
@@ -108,6 +109,27 @@ def cmd_draft(args):
 
     consensus_top10 = adapter.fetch_consensus_top10(players_raw)
 
+    # Real human ADP is what the rest-of-draft forecast reads to estimate
+    # who'll still be on the board at your later turns (see
+    # DraftAssistant._expected_available). Losing it is a real downgrade --
+    # the forecast falls back to extrapolating this draft's own observed
+    # positional mix, which over-reads the RB/WR-heavy opening rounds -- so
+    # say so out loud rather than degrading silently.
+    adp_ranks = {}
+    try:
+        adp_ids, adp_stale, adp_meta = fetch_adp(
+            cache, players_raw, teams=total_rosters, season=season
+        )
+        adp_ranks = {player_id: rank for rank, player_id in enumerate(adp_ids, start=1)}
+        if adp_stale:
+            print("WARNING: using cached ADP (live fetch failed)")
+        else:
+            print(f"ADP: {adp_meta.get('total_drafts')} human {adp_meta.get('type')} drafts, "
+                  f"{adp_meta.get('teams')}-team")
+    except AdpFetchError as exc:
+        print(f"WARNING: no human ADP ({exc}) -- rest-of-draft forecast falls back to this "
+              f"draft's observed positional mix, which is less reliable early")
+
     assistant = DraftAssistant(
         client,
         cache,
@@ -118,6 +140,7 @@ def cmd_draft(args):
         board_degraded=projections.degraded,
         consensus_top10=consensus_top10,
         total_rosters=total_rosters,
+        adp_ranks=adp_ranks,
     )
 
     print(f"Draft assistant started for draft {args.draft_id} "
