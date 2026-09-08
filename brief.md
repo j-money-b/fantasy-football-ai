@@ -1,6 +1,6 @@
 # Weekly Brief -- Week 1
 
-Last successful run: 2026-09-06T15:51:40.063067+00:00
+Last successful run: 2026-09-08T16:52:50.748924+00:00
 
 ## Your Lineup
 Recommended lineup (123.8 pts):
@@ -11,8 +11,8 @@ Recommended lineup (123.8 pts):
   - WR: Drake London (WR, ATL) -- 15.8 pts
   - TE: Tyler Warren (TE, IND) -- 13.9 pts [Questionable]
   - FLEX: Bijan Robinson (RB, ATL) -- 21.5 pts
-  - K: Ka'imi Fairbairn (K, HOU) -- 6.7 pts
-  - DEF: Detroit Lions (DEF, DET) -- 7.4 pts
+  - K: Ka'imi Fairbairn (K, HOU) -- 6.8 pts
+  - DEF: Detroit Lions (DEF, DET) -- 7.3 pts
 Bench:
   - Rico Dowdle (RB, PIT) -- 12.5 pts [depth: RB2]
   - Michael Pittman (WR, PIT) -- 10.8 pts [Questionable] [depth: RWR2]
