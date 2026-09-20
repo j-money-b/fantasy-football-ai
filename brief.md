@@ -1,37 +1,34 @@
 # Weekly Brief -- Week 2
 
-Last successful run: 2026-09-15T17:21:02.502717+00:00
+Last successful run: 2026-09-20T16:33:56.003077+00:00
 
 ## Your Lineup
-Recommended lineup (120.3 pts):
-  - QB: Jayden Daniels (QB, WAS) -- 20.4 pts
-  - RB: Breece Hall (RB, NYJ) -- 13.8 pts
-  - RB: Ashton Jeanty (RB, LV) -- 14.4 pts
-  - WR: Michael Pittman (WR, PIT) -- 11.6 pts [depth: RWR2]
-  - WR: Drake London (WR, ATL) -- 14.1 pts
+Recommended lineup (119.3 pts):
+  - QB: Jayden Daniels (QB, WAS) -- 20.2 pts
+  - RB: Breece Hall (RB, NYJ) -- 14.4 pts
+  - RB: Ashton Jeanty (RB, LV) -- 15.9 pts
+  - WR: Emeka Egbuka (WR, TB) -- 10.8 pts
+  - WR: Drake London (WR, ATL) -- 11.7 pts
   - TE: Tyler Warren (TE, IND) -- 11.3 pts
-  - FLEX: Bijan Robinson (RB, ATL) -- 22.2 pts
+  - FLEX: Bijan Robinson (RB, ATL) -- 22.5 pts
   - K: Ka'imi Fairbairn (K, HOU) -- 7.3 pts
   - DEF: Detroit Lions (DEF, DET) -- 5.2 pts
-  - Changes vs. your currently-set lineup:
-    - Start Michael Pittman (WR)
-    - Sit Emeka Egbuka (WR)
 Bench:
-  - Chuba Hubbard (RB, CAR) -- 12.1 pts
-  - Rico Dowdle (RB, PIT) -- 11.2 pts [depth: RB2]
-  - Emeka Egbuka (WR, TB) -- 10.8 pts
-  - Courtland Sutton (WR, DEN) -- 9.6 pts [depth: LWR2]
-  - Jakobi Meyers (WR, JAX) -- 9.4 pts [depth: RWR3]
+  - Chuba Hubbard (RB, CAR) -- 12.4 pts
+  - Rico Dowdle (RB, PIT) -- 11.1 pts [depth: RB2]
+  - Courtland Sutton (WR, DEN) -- 10.7 pts
+  - Jakobi Meyers (WR, JAX) -- 7.4 pts [depth: RWR3]
+  - Michael Pittman (WR, PIT) -- 0.0 pts [Out] [depth: RWR6]
 
 ## Opponent (Week 2)
 Facing **juniorarauz22**.
 Their currently-set starters:
-  - Jalen Hurts (QB, PHI) -- 20.9 pts
+  - Jalen Hurts (QB, PHI) -- 20.8 pts
   - Jahmyr Gibbs (RB, DET) -- 26.1 pts
-  - Omarion Hampton (RB, LAC) -- 13.7 pts
-  - Nico Collins (WR, HOU) -- 17.8 pts
-  - Tetairoa McMillan (WR, CAR) -- 14.0 pts
-  - Colston Loveland (TE, CHI) -- 12.1 pts
-  - Mike Evans (WR, SF) -- 13.7 pts
+  - Omarion Hampton (RB, LAC) -- 14.0 pts
+  - Mike Evans (WR, SF) -- 12.9 pts
+  - Tetairoa McMillan (WR, CAR) -- 14.6 pts
+  - Dalton Kincaid (TE, BUF) -- 12.1 pts
+  - DK Metcalf (WR, PIT) -- 13.9 pts
   - Brandon Aubrey (K, DAL) -- 7.3 pts
-  - Seattle Seahawks (DEF, SEA) -- 8.9 pts
+  - Seattle Seahawks (DEF, SEA) -- 8.8 pts
