@@ -170,3 +170,54 @@ def test_subject_flags_a_degraded_run():
     subject = email_subject(build_brief_model(_context(projections_degraded=True)))
 
     assert "degraded" in subject
+
+
+# --- inbox legibility ------------------------------------------------------
+# Subject + preheader are what the inbox list shows. Together they have to
+# answer "what do I do this week" without the mail being opened.
+
+def test_preheader_carries_the_decision_not_boilerplate():
+    context = _context(
+        roster_positions=["QB"], my_players=[_player("1", "QB", 0.0)],
+        my_roster={"roster_id": 1, "starters": ["1"]},
+        players_raw={"1": {"injury_status": "Out"}},
+    )
+    plan = _plan(targets=[_target(_player("99", "QB", 17.6), 17.6)], bids={"99": (20, 35)})
+
+    html = render_brief_html(context, waiver_plan=plan)
+    preheader = html.split('mso-hide:all;')[1].split(">", 1)[1].split("&#8203;")[0]
+
+    assert "Out" in preheader
+    assert "$20-$35" in preheader
+    assert "QB-99" in preheader
+
+
+def test_headline_is_the_first_thing_after_the_masthead():
+    # A brief read on a phone must not put a scoreboard above the answer.
+    context = _context(
+        roster_positions=["QB"], my_players=[_player("1", "QB", 0.0)],
+        my_roster={"roster_id": 1, "starters": ["1"]},
+        players_raw={"1": {"injury_status": "Out"}},
+        opponent_roster={"roster_id": 2, "starters": ["3"]},
+        opponent_display_name="Rival",
+        opponent_players=[_player("3", "WR", 30.0)],
+    )
+
+    html = render_brief_html(context)
+
+    # The margin sentence belongs to the scoreline, which must follow the answer.
+    assert html.index("Do this") < html.index("projected to")
+
+
+def test_headline_says_so_when_nothing_needs_doing():
+    html = render_brief_html(_context())
+
+    assert "All clear" in html
+    assert "Nothing needs doing this week" in html
+
+
+def test_apple_mail_is_told_not_to_invert_the_palette():
+    html = render_brief_html(_context())
+
+    assert 'name="color-scheme" content="light"' in html
+    assert 'name="supported-color-schemes" content="light"' in html

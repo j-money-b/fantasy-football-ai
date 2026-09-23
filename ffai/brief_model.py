@@ -156,3 +156,38 @@ def _lineup_changes(context, lineup):
     sits = [by_id[pid] for pid in sorted(current_ids - recommended_ids) if pid in by_id]
     gain = round(sum(p.points for p in starts) - sum(p.points for p in sits), 2)
     return starts, sits, gain
+
+
+def headline(model):
+    """The one sentence that answers "what do I actually do this week".
+
+    Used as the email preheader (the grey preview text the inbox shows next
+    to the subject) and as the first visible line of the brief, so the answer
+    is readable without opening the mail and without scrolling it."""
+    if not model.has_roster:
+        return "No roster found for you in this league yet."
+    if model.degraded:
+        return "Projections are unavailable -- showing your currently-set lineup only, not optimized."
+    if not model.items:
+        return "Your lineup is set and every starter is playing. Nothing needs doing this week."
+
+    item = model.items[0]
+    extra = ""
+    if len(model.items) > 1:
+        others = len(model.items) - 1
+        extra = f" (+{others} smaller {'fix' if others == 1 else 'fixes'} below)"
+
+    if item.fix is None:
+        return f"{_hole_subject(item.hole)}, but nothing on the wire beats them -- start them anyway{extra}."
+
+    name = item.fix.player.name
+    if item.bid:
+        return f"{_hole_subject(item.hole)}. Bid ${item.bid[0]}-${item.bid[1]} on {name} to replace them{extra}."
+    return f"{_hole_subject(item.hole)}. Add {name} to replace them{extra}."
+
+
+def _hole_subject(hole):
+    if hole.player is None:
+        return f"Your {hole.slot} slot is empty"
+    reason = hole.reason.replace("**", "")
+    return reason[0].upper() + reason[1:] if reason else f"Your {hole.slot} needs attention"

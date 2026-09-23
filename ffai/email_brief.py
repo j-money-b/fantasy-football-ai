@@ -27,6 +27,7 @@ from ffai.brief_model import (
     SWAP_NOISE_POINTS,
     build_brief_model,
     depth_note,
+    headline,
     injury_status,
     margin_sentence,
     upgrades_by_position,
@@ -79,12 +80,13 @@ def render_brief_html(context, waiver_plan=None):
         ))
         return _shell("".join(parts), model)
 
-    parts.append(_scoreline(model))
+    parts.append(_headline_bar(model))
     parts.extend(_action_cards(model))
+    parts.append(_scoreline(model))
     parts.append(_lineup_panel(model, context))
     parts.extend(_changes_panel(model))
-    parts.append(_bench_panel(model, context))
     parts.extend(_waiver_panels(model))
+    parts.append(_bench_panel(model, context))
     parts.extend(_opponent_panel(model))
 
     return _shell("".join(parts), model)
@@ -94,19 +96,30 @@ def render_brief_html(context, waiver_plan=None):
 
 def _shell(body, model):
     subject_hint = escape(email_subject(model))
+    # Preheader: the grey preview text an inbox shows beside the subject. Left
+    # unset, clients scrape whatever markup comes first, which is why so much
+    # mail previews as "View in browser". The trailing zero-width joiners stop
+    # body copy from bleeding in after it.
+    preheader = escape(headline(model))
+    # color-scheme:light is deliberate -- it stops Apple Mail force-inverting
+    # a palette that was designed as a set, which turns considered colour into
+    # mud. The design commits to one theme rather than fighting the client.
     return f"""<!doctype html>
-<html><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
 <title>{subject_hint}</title>
 </head>
-<body style="margin:0;padding:0;background:{GROUND};">
+<body style="margin:0;padding:0;background:{GROUND};-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;font-size:1px;line-height:1px;color:{GROUND};">{preheader}&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;&#8203;</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{GROUND};">
 <tr><td align="center" style="padding:24px 12px 48px;">
 <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="width:640px;max-width:100%;">
 {body}
-<tr><td style="padding:18px 4px 0;font-family:{SANS};font-size:11px;color:{INK_3};text-align:center;">
-Generated from live Sleeper data. Reply to this address and nobody will read it -- it's a robot.
+<tr><td style="padding:22px 4px 0;font-family:{SANS};font-size:11px;line-height:1.6;color:{INK_3};text-align:center;">
+Generated from live Sleeper data by your own fantasy assistant.<br>
+It advises only &mdash; nothing here has been done to your Sleeper team for you.
 </td></tr>
 </table>
 </td></tr></table>
@@ -138,6 +151,22 @@ def _warnings(model):
 
 
 # --- sections --------------------------------------------------------------
+
+def _headline_bar(model):
+    """The answer, before anything else. A brief read on a phone must not put
+    a scoreboard above the one sentence that says what to do."""
+    text = escape(headline(model))
+    urgent = any(item.hole.severity == "critical" for item in model.items)
+    tone = CRIT if urgent else (ACCENT if model.items else GOOD)
+    bg = CRIT_BG if urgent else (ACCENT_BG if model.items else GOOD_BG)
+    label = "Do this" if model.items else "All clear"
+    return f"""<tr><td style="padding-top:18px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{bg};border-left:4px solid {tone};">
+<tr><td style="padding:15px 18px;">
+{_kicker(label)}
+<div style="font-family:{SANS};font-size:16px;line-height:1.45;font-weight:600;color:{INK};padding-top:4px;">{text}</div>
+</td></tr></table></td></tr>"""
+
 
 def _scoreline(model):
     if model.opponent_total is None:
