@@ -1,5 +1,6 @@
 import statistics
 from collections import Counter
+from dataclasses import dataclass
 
 from ffai.lineup import optimize_lineup
 from ffai.models import WaiverTarget
@@ -90,7 +91,7 @@ def _positions_needing_depth(my_players, roster_positions):
     return {pos for pos, count in required.items() if have.get(pos, 0) < count}
 
 
-def rank_waiver_targets(free_agents, my_players, roster_positions, trending_counts=None, projections_degraded=False, limit=15):
+def rank_waiver_targets(free_agents, my_players, roster_positions, trending_counts=None, projections_degraded=False, limit=15, limit_per_position=None):
     """Ranks free agents by the exact marginal points they'd add to your OWN
     optimal lineup right now (reuses lineup.optimize_lineup, the same exact
     optimizer the weekly brief uses) -- this single number already captures
@@ -134,6 +135,21 @@ def rank_waiver_targets(free_agents, my_players, roster_positions, trending_coun
         targets.sort(key=lambda t: (t.player.position in needy_positions, t.trending_count or 0), reverse=True)
     else:
         targets.sort(key=lambda t: (t.marginal_value, t.trending_count or 0), reverse=True)
+
+    # One gaping roster hole otherwise floods the entire list: with a QB
+    # ruled out, every one of the top 15 targets by marginal value is a QB,
+    # hiding every RB/WR/TE opportunity on the wire. Capping per position
+    # keeps the ranking honest while still showing the rest of the board.
+    if limit_per_position:
+        seen = Counter()
+        kept = []
+        for target in targets:
+            position = target.player.position
+            if seen[position] >= limit_per_position:
+                continue
+            seen[position] += 1
+            kept.append(target)
+        targets = kept
 
     return targets[:limit]
 
@@ -245,3 +261,94 @@ def format_waiver_report(targets, waiver_label, faab, remaining_budget=None, faa
         lines.append(priority_note)
 
     return "\n".join(lines)
+
+
+@dataclass
+class WaiverPlan:
+    """Everything the waiver views need, computed once. Exists because the
+    brief, the `waivers` command and `refresh` all need the same numbers --
+    this used to live only in cli.py, which is why the brief never had any
+    of it (PRD 6.3 output existed, but only behind a command you had to
+    know to run)."""
+    targets: list  # list[WaiverTarget] -- position-capped, for display
+    ranked: list  # list[WaiverTarget] -- the full ranking, for fix-matching in actions.py
+    bids: dict  # player_id -> (low, high) dollars; empty unless FAAB
+    label: str
+    faab: bool
+    remaining_budget: "int | None"
+    pace_warning: "str | None"
+    priority_note: "str | None"
+    degraded: bool
+
+
+# Bids are tiered across a wider pool than we display: the gap-clustering in
+# faab_bid_ranges needs enough of the board to find real value cliffs, and the
+# absolute WAIVER_WORTH_POINTS/WAIVER_NOISE_POINTS floors already stop a quiet
+# week from reaching the top band regardless of pool size.
+BID_POOL_SIZE = 50
+DISPLAY_PER_POSITION = 3
+
+
+def build_waiver_plan(context, byes_by_team=None, per_position=DISPLAY_PER_POSITION):
+    """Composition helper: turns a WeeklyContext into the full waiver picture.
+    Returns None when there's no roster to compute against."""
+    if context.my_roster is None:
+        return None
+
+    league_settings = context.league.get("settings", {})
+    scoring_settings = context.league.get("scoring_settings", {})
+    roster_settings = context.my_roster.get("settings", {}) or {}
+
+    free_agents = compute_free_agents(
+        context.players_raw, context.rosters, context.projections, scoring_settings, byes_by_team
+    )
+    ranked = rank_waiver_targets(
+        free_agents,
+        context.my_players,
+        context.roster_positions,
+        trending_counts=context.trending_counts,
+        projections_degraded=context.projections_degraded,
+        limit=BID_POOL_SIZE,
+    )
+    # `limit` has to accommodate the per-position cap, or the flat truncation
+    # re-creates exactly the flooding the cap exists to prevent: 6 positions x
+    # 3 each is 18 targets, and the default limit of 15 was cutting the tail --
+    # which, because the list is still value-sorted, meant the QB-flooded top
+    # survived and RB dropped to a single entry.
+    positions = {p.position for p in free_agents}
+    targets = rank_waiver_targets(
+        free_agents,
+        context.my_players,
+        context.roster_positions,
+        trending_counts=context.trending_counts,
+        projections_degraded=context.projections_degraded,
+        limit=max(len(positions) * per_position, BID_POOL_SIZE),
+        limit_per_position=per_position,
+    )
+
+    faab = is_faab(league_settings)
+    remaining = None
+    bids = {}
+    pace = None
+    priority_note = None
+
+    if faab:
+        remaining = league_settings.get("waiver_budget", 0) - roster_settings.get("waiver_budget_used", 0)
+        bids = faab_bid_ranges(ranked, remaining)
+        pace = budget_pace_warning(league_settings, roster_settings, context.week)
+    else:
+        priority_note = priority_judgment(
+            ranked[0] if ranked else None, waiver_position=roster_settings.get("waiver_position")
+        )
+
+    return WaiverPlan(
+        targets=targets,
+        ranked=ranked,
+        bids=bids,
+        label=waiver_system_label(league_settings),
+        faab=faab,
+        remaining_budget=remaining,
+        pace_warning=pace,
+        priority_note=priority_note,
+        degraded=context.projections_degraded,
+    )

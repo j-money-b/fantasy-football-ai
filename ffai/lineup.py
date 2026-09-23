@@ -4,7 +4,10 @@ from ffai.vorp import DEDICATED_POSITIONS, FLEX_ELIGIBILITY
 STARTING_SLOT_TYPES = DEDICATED_POSITIONS | set(FLEX_ELIGIBILITY)
 
 
-def _eligible_positions(slot):
+def eligible_positions(slot):
+    """Positions that may legally fill this roster slot. Public because
+    actions.py needs it to decide which waiver targets can fill a given
+    hole -- a FLEX hole accepts any flex-eligible position, not just one."""
     return {slot} if slot in DEDICATED_POSITIONS else FLEX_ELIGIBILITY[slot]
 
 
@@ -35,7 +38,7 @@ def optimize_lineup(players, roster_positions):
 
     def try_assign(player, visited_slots):
         for idx, slot in enumerate(slots):
-            if idx in visited_slots or player.position not in _eligible_positions(slot):
+            if idx in visited_slots or player.position not in eligible_positions(slot):
                 continue
             visited_slots.add(idx)
             occupant = assignment.get(idx)

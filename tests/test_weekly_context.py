@@ -35,6 +35,9 @@ class FakeProjectionsAdapter:
         )
 
 
+TRENDING_DATA = [{"player_id": "3", "count": 4200}]
+
+
 class FakeClient:
     def __init__(self, raise_methods=None):
         self.raise_methods = raise_methods or set()
@@ -70,6 +73,10 @@ class FakeClient:
     def get_nfl_state(self):
         self._maybe_raise("state")
         return NFL_STATE_DATA
+
+    def get_trending_players(self, kind, lookback_hours=24, limit=100):
+        self._maybe_raise("trending")
+        return TRENDING_DATA
 
 
 def test_gather_weekly_context_resolves_my_roster_and_opponent(tmp_path):

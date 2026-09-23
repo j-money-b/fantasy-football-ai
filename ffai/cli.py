@@ -22,25 +22,15 @@ from ffai.repository import (
     fetch_players,
     fetch_projections,
     fetch_rosters,
-    fetch_trending_adds,
     fetch_user,
     fetch_users,
 )
 from ffai.retrospective import compute_season_bench_report, format_bench_report
 from ffai.roster import find_display_name, find_my_roster, find_roster_by_display_name
-from ffai.sleeper_client import SleeperAPIError, SleeperClient
+from ffai.sleeper_client import SleeperClient
 from ffai.trade import evaluate_trade, format_trade_evaluation, resolve_player_ids
 from ffai.vorp import build_tiers, compute_replacement_levels, compute_vorp
-from ffai.waivers import (
-    compute_free_agents,
-    faab_bid_ranges,
-    format_waiver_report,
-    is_faab,
-    priority_judgment,
-    rank_waiver_targets,
-    waiver_system_label,
-    budget_pace_warning,
-)
+from ffai.waivers import build_waiver_plan, format_waiver_report
 from ffai.weekly_context import gather_weekly_context
 
 
@@ -315,49 +305,25 @@ def _format_startsit_text(context):
     return "\n".join(lines)
 
 
-def _format_waivers_text(context, client, cache):
-    if context.my_roster is None:
+def _format_waivers_text(context):
+    """Plain-text waiver view for `waivers` and `refresh`. The computation
+    itself lives in waivers.build_waiver_plan so the brief renders the exact
+    same numbers -- it used to live here, which is precisely why the brief
+    never had a waiver section at all."""
+    plan = build_waiver_plan(context, byes_by_team=context.byes_by_team)
+    if plan is None:
         return "No roster found for you in this league yet -- can't compute waiver targets."
 
-    league_settings = context.league.get("settings", {})
-    scoring_settings = context.league.get("scoring_settings", {})
-    roster_settings = context.my_roster.get("settings", {}) or {}
-    byes_by_team = load_bye_weeks()
-
-    trending_counts = {}
-    try:
-        trending, _, _ = fetch_trending_adds(client, cache)
-        trending_counts = {row["player_id"]: row.get("count") for row in trending if row.get("player_id")}
-    except SleeperAPIError:
-        pass  # supplementary signal only (PRD 6.3), not load-bearing
-
-    free_agents = compute_free_agents(
-        context.players_raw, context.rosters, context.projections, scoring_settings, byes_by_team
-    )
-    targets = rank_waiver_targets(
-        free_agents,
-        context.my_players,
-        context.roster_positions,
-        trending_counts=trending_counts,
-        projections_degraded=context.projections_degraded,
-    )
-
-    label = waiver_system_label(league_settings)
-    faab = is_faab(league_settings)
-
     lines = []
-    if context.projections_degraded:
+    if plan.degraded:
         lines.append("NO PROJECTIONS AVAILABLE -- waiver targets ranked by roster need and trending-add velocity only.")
         lines.append("")
 
-    if faab:
-        remaining = league_settings.get("waiver_budget", 0) - roster_settings.get("waiver_budget_used", 0)
-        bids = faab_bid_ranges(targets, remaining)
-        pace = budget_pace_warning(league_settings, roster_settings, context.week)
-        lines.append(format_waiver_report(targets, label, True, remaining_budget=remaining, faab_bids=bids, pace_warning=pace))
-    else:
-        priority_note = priority_judgment(targets[0] if targets else None, waiver_position=roster_settings.get("waiver_position"))
-        lines.append(format_waiver_report(targets, label, False, priority_note=priority_note))
+    lines.append(format_waiver_report(
+        plan.targets, plan.label, plan.faab,
+        remaining_budget=plan.remaining_budget, faab_bids=plan.bids,
+        pace_warning=plan.pace_warning, priority_note=plan.priority_note,
+    ))
 
     if context.warnings:
         lines.append("")
@@ -373,7 +339,7 @@ def cmd_waivers(args):
     cache = Cache(db_path=CACHE_DB_PATH)
 
     context = gather_weekly_context(client, cache, args.league_id, week=args.week)
-    print(_format_waivers_text(context, client, cache))
+    print(_format_waivers_text(context))
     return 0
 
 
@@ -391,7 +357,7 @@ def cmd_brief(args):
     cache = Cache(db_path=CACHE_DB_PATH)
 
     context = gather_weekly_context(client, cache, args.league_id, week=args.week)
-    markdown = render_brief_markdown(context)
+    markdown = render_brief_markdown(context, waiver_plan=build_waiver_plan(context, byes_by_team=context.byes_by_team))
 
     if args.out:
         Path(args.out).write_text(markdown, encoding="utf-8")
@@ -411,7 +377,7 @@ def cmd_refresh(args):
     context = gather_weekly_context(client, cache, args.league_id, week=args.week, player_dict_max_age_hours=0)
     print(_format_startsit_text(context))
     print()
-    print(_format_waivers_text(context, client, cache))
+    print(_format_waivers_text(context))
     return 0
 
 

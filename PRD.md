@@ -173,6 +173,36 @@ Consequences:
 - Injury status and depth chart changes surfaced
 - Opponent's lineup for context
 
+### 6.2a The Brief Must Draw the Conclusion
+
+**Added 2026-09-23 after a real failure.** The Week 3 brief rendered
+`QB: Jayden Daniels -- 0.0 pts [Out]` in the recommended starting lineup and
+said nothing further. Every fact needed was on the page; the conclusion was
+never drawn. The user found out by reading the projection himself.
+
+The brief is the only surface most weeks are managed from, so it — not just
+the CLI subcommands — owns the whole weekly decision:
+
+- **Action Required section, above the lineup.** Any starting slot that is
+  empty, filled by a player ruled out (`Out`/`IR`/`PUP`/`Suspended`/`Doubtful`),
+  on bye, or projected below a floor is a **hole**, and each hole is named
+  with the specific replacement to add and (under FAAB) the bid to place.
+  A ruled-out player is a hole **regardless of his projection** — projections
+  lag the injury news, and a stale 18.0 next to `Out` is precisely the
+  "confidently wrong" case §4 forbids.
+- **Waiver targets inline** (6.3's output, in the brief, not only behind
+  `ffai waivers`), capped per position so one gaping hole cannot flood the
+  list, and split into upgrades that help this week vs. speculative adds the
+  market is buying.
+- **The matchup stated as a margin**, with the action items' combined point
+  gain measured against that margin — the brief should say whether doing the
+  work actually flips the week.
+
+**Anti-goal:** an action list padded with noise. A `Questionable` tag is not
+a hole (those players usually play) and a +0.1-pt kicker is not a
+recommendation. A brief that cries wolf stops being read, which fails the
+same way silence does.
+
 ### 6.3 Waivers + FAAB
 
 **The league's waiver system is not yet known** — the commissioner sets it. Read from league settings; support both:

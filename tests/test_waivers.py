@@ -272,3 +272,35 @@ def test_faab_skips_targets_inside_the_noise_floor():
 
     assert "noise" not in bids
     assert "real" in bids
+
+
+# --- position capping ------------------------------------------------------
+
+def test_limit_per_position_stops_one_roster_hole_flooding_the_list():
+    # With a QB ruled out, every QB carries a huge marginal value and the
+    # unbucketed top 15 was 15 QBs -- hiding every RB/WR/TE on the wire.
+    free_agents = [_player(f"qb{i}", "QB", 20.0 - i) for i in range(10)]
+    free_agents += [_player(f"rb{i}", "RB", 9.0 - i) for i in range(5)]
+    roster_positions = ["QB", "RB", "BN"]
+
+    targets = rank_waiver_targets(free_agents, my_players=[], roster_positions=roster_positions, limit_per_position=2)
+    positions = [t.player.position for t in targets]
+
+    assert positions.count("QB") == 2
+    assert positions.count("RB") == 2
+
+
+def test_limit_per_position_keeps_the_best_of_each_position():
+    free_agents = [_player("qb-good", "QB", 25.0), _player("qb-bad", "QB", 3.0)]
+
+    targets = rank_waiver_targets(free_agents, my_players=[], roster_positions=["QB"], limit_per_position=1)
+
+    assert targets[0].player.player_id == "qb-good"
+
+
+def test_unbucketed_ranking_is_unchanged_by_default():
+    free_agents = [_player(f"qb{i}", "QB", 20.0 - i) for i in range(5)]
+
+    targets = rank_waiver_targets(free_agents, my_players=[], roster_positions=["QB"])
+
+    assert len(targets) == 5

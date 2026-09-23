@@ -13,6 +13,7 @@ from ffai.repository import (
     fetch_players,
     fetch_projections,
     fetch_rosters,
+    fetch_trending_adds,
     fetch_user,
     fetch_users,
 )
@@ -55,6 +56,8 @@ class WeeklyContext:
     warnings: list = field(default_factory=list)  # staleness + degradation notes, for the R1 banner
     rosters: list = field(default_factory=list)  # every roster in the league -- waivers.py needs this to find free agents
     projections: "object | None" = None  # the raw ProjectionsResult -- waivers.py needs this to score free agents
+    trending_counts: dict = field(default_factory=dict)  # player_id -> recent add count across Sleeper; supplementary waiver signal
+    byes_by_team: dict = field(default_factory=dict)  # team -> bye week, so callers don't re-read the bye table
 
 
 def gather_weekly_context(
@@ -129,6 +132,15 @@ def gather_weekly_context(
 
     byes_by_team = load_bye_weeks()
 
+    # Supplementary signal only (PRD 6.3), never load-bearing -- a failure
+    # here must not cost us the rest of the brief.
+    trending_counts = {}
+    try:
+        trending, _trending_stale, _trending_fetched_at = fetch_trending_adds(client, cache)
+        trending_counts = {row["player_id"]: row.get("count") for row in trending if row.get("player_id")}
+    except SleeperAPIError as exc:
+        logger.info("trending adds unavailable: %s", exc)
+
     my_roster = find_my_roster(rosters, user.get("user_id"))
     my_players = _roster_projections(my_roster, players_raw, projections, scoring_settings, byes_by_team)
 
@@ -155,6 +167,8 @@ def gather_weekly_context(
         warnings=warnings,
         rosters=rosters,
         projections=projections,
+        trending_counts=trending_counts,
+        byes_by_team=byes_by_team,
     )
 
 
