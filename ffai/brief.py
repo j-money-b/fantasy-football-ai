@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
 
-from ffai.actions import find_lineup_holes, recommend_fixes
-from ffai.lineup import optimize_lineup
-from ffai.waivers import WAIVER_NOISE_POINTS
-
-INJURY_STATUSES_WORTH_FLAGGING = {"Questionable", "Doubtful", "Out", "IR", "PUP", "Suspended"}
+from ffai.brief_model import (
+    INJURY_STATUSES_WORTH_FLAGGING,
+    SWAP_NOISE_POINTS,
+    build_brief_model,
+    margin_sentence,
+    upgrades_by_position,
+)
 
 # Block-drawing characters, not emoji (explicit user preference) and not
 # images: GitHub renders issue comments as markdown with no CSS, so a bar
@@ -33,51 +35,44 @@ def render_brief_markdown(context, waiver_plan=None):
         for warning in context.warnings:
             lines.append(f"> - {warning}")
 
-    # Computed once and shared: the lineup, its holes and the recommended
-    # fixes are each needed by more than one section, and recomputing them
-    # per section is how two parts of the same brief end up disagreeing.
-    result = None
-    items = []
-    if context.my_roster is not None and not context.projections_degraded:
-        result = optimize_lineup(context.my_players, context.roster_positions)
-        holes = find_lineup_holes(result, context.players_raw, context.week)
-        items = recommend_fixes(
-            holes,
-            waiver_plan.ranked if waiver_plan else [],
-            waiver_plan.bids if waiver_plan else {},
-        )
+    # Content decisions live in brief_model, shared with the HTML renderer,
+    # so the emailed brief and the GitHub thread can never disagree about
+    # what this week's recommendation is.
+    model = build_brief_model(context, waiver_plan)
 
-    lines.extend(_render_action_section(context, waiver_plan, result, items))
+    lines.extend(_render_action_section(model))
 
     lines.append("")
     lines.append("---")
     lines.append("")
     lines.append("## Your Lineup")
-    lines.extend(_render_my_lineup_section(context, result))
+    lines.extend(_render_my_lineup_section(context, model))
 
     lines.append("")
     lines.append("---")
     lines.append("")
     lines.append(f"## Matchup -- Week {context.week}")
-    lines.extend(_render_opponent_section(context, result, items))
+    lines.extend(_render_opponent_section(context, model))
 
     if waiver_plan is not None:
         lines.append("")
         lines.append("---")
         lines.append("")
         lines.append("## Waiver Wire")
-        lines.extend(_render_waiver_section(waiver_plan))
+        lines.extend(_render_waiver_section(model))
 
     return "\n".join(lines)
 
 
 # --- action items ----------------------------------------------------------
 
-def _render_action_section(context, waiver_plan, result, items):
+def _render_action_section(model):
     """The section the brief was missing. Everything here was already
     computable before -- a Week 3 2026 brief showed a 0.0-pt ruled-out QB in
     the starting lineup and drew no conclusion from it."""
-    if result is None:
+    waiver_plan = model.plan
+    items = model.items
+    if model.lineup is None:
         return []
     if not items:
         return ["", "> [!NOTE]", "> **No lineup holes.** Every starting slot is filled by someone playing this week."]
@@ -125,7 +120,7 @@ def _render_action_section(context, waiver_plan, result, items):
 
 # --- lineup ----------------------------------------------------------------
 
-def _render_my_lineup_section(context, result=None):
+def _render_my_lineup_section(context, model):
     if context.my_roster is None:
         return ["", "No roster found for you in this league yet."]
 
@@ -135,8 +130,7 @@ def _render_my_lineup_section(context, result=None):
         ]
 
     lines = []
-    if result is None:
-        result = optimize_lineup(context.my_players, context.roster_positions)
+    result = model.lineup
     lines.append("")
     lines.append(f"**Projected total: {result.total_points:.1f} pts** *(recommended lineup)*")
     lines.append("")
@@ -153,7 +147,7 @@ def _render_my_lineup_section(context, result=None):
             f"| **{slot.player.points:.1f}** | `{_bar(slot.player.points, scale)}` |"
         )
 
-    lines.extend(_render_lineup_changes(context, result))
+    lines.extend(_render_lineup_changes(model))
 
     if result.bench:
         lines.append("")
@@ -169,45 +163,35 @@ def _render_my_lineup_section(context, result=None):
     return lines
 
 
-def _render_lineup_changes(context, result):
-    current_starter_ids = {pid for pid in context.my_roster.get("starters") or [] if pid != "0"}
-    recommended_ids = {s.player.player_id for s in result.slots if s.player is not None}
-    if not current_starter_ids or current_starter_ids == recommended_ids:
+def _render_lineup_changes(model):
+    if not model.starts and not model.sits:
         return []
 
-    swapped_in = recommended_ids - current_starter_ids
-    swapped_out = current_starter_ids - recommended_ids
-    if not swapped_in and not swapped_out:
-        return []
-
-    by_id = {p.player_id: p for p in context.my_players}
     lines = ["", "**Changes vs. your currently-set lineup**", ""]
     lines.append("| | Player |")
     lines.append("|:--|:--|")
-    for player_id in sorted(swapped_in):
-        player = by_id.get(player_id)
-        if player:
-            lines.append(f"| **Start** | {player.name} ({player.position}) -- {player.points:.1f} pts |")
-    for player_id in sorted(swapped_out):
-        player = by_id.get(player_id)
-        if player:
-            lines.append(f"| **Sit** | {player.name} ({player.position}) -- {player.points:.1f} pts |")
+    for player in model.starts:
+        lines.append(f"| **Start** | {player.name} ({player.position}) -- {player.points:.1f} pts |")
+    for player in model.sits:
+        lines.append(f"| **Sit** | {player.name} ({player.position}) -- {player.points:.1f} pts |")
+    if 0 < model.swap_gain < SWAP_NOISE_POINTS:
+        lines.append("")
+        lines.append(f"*Worth only +{model.swap_gain:.1f} pts -- inside projection noise. "
+                     f"Make it if you're already in the app, skip it if you're not.*")
     return lines
 
 
 # --- matchup ---------------------------------------------------------------
 
-def _render_opponent_section(context, result=None, items=()):
+def _render_opponent_section(context, model):
     if context.opponent_roster is None:
         return ["", "No matchup data available yet."]
 
     lines = ["", f"Facing **{context.opponent_display_name}**."]
 
     if not context.projections_degraded:
-        if result is None:
-            result = optimize_lineup(context.my_players, context.roster_positions)
-        mine = result.total_points
-        theirs = round(sum(p.points for p in _starters(context.opponent_roster, context.opponent_players)), 2)
+        mine = model.my_total
+        theirs = model.opponent_total or 0.0
         scale = max(mine, theirs, 1.0)
         lines.append("")
         lines.append("| | Projected | |")
@@ -215,38 +199,25 @@ def _render_opponent_section(context, result=None, items=()):
         lines.append(f"| **You** | **{mine:.1f}** | `{_bar(mine, scale)}` |")
         lines.append(f"| **{context.opponent_display_name}** | **{theirs:.1f}** | `{_bar(theirs, scale)}` |")
         lines.append("")
-        margin = round(mine - theirs, 1)
-        gain = round(sum(item.gain for item in items), 1)
-        if margin >= 0:
-            lines.append(f"You're projected to **win by {margin:.1f}**.")
-        elif gain <= 0:
-            lines.append(f"You're projected to **lose by {abs(margin):.1f}**.")
-        elif gain >= abs(margin):
-            lines.append(
-                f"You're projected to **lose by {abs(margin):.1f}** -- but making every move above "
-                f"is worth **+{gain:.1f}**, which flips this matchup."
-            )
-        else:
-            lines.append(
-                f"You're projected to **lose by {abs(margin):.1f}**. Making every move above is worth "
-                f"**+{gain:.1f}**, closing most of the gap but not all of it."
-            )
+        lines.append(margin_sentence(model) or "")
 
     lines.append("")
     lines.append(f"**{context.opponent_display_name}'s currently-set starters**")
     lines.append("")
     lines.append("| Player | Proj |")
     lines.append("|:--|--:|")
-    for player in _starters(context.opponent_roster, context.opponent_players):
+    starters = model.opponent_starters or _starters(context.opponent_roster, context.opponent_players)
+    for player in starters:
         lines.append(f"| {player.name} ({player.position}, {player.team}) | {player.points:.1f} |")
-    if not _starters(context.opponent_roster, context.opponent_players):
+    if not starters:
         lines.append("| *(no lineup set yet)* | -- |")
     return lines
 
 
 # --- waivers ---------------------------------------------------------------
 
-def _render_waiver_section(plan):
+def _render_waiver_section(model):
+    plan = model.plan
     lines = ["", f"*{plan.label}*"]
 
     if plan.degraded:
@@ -267,12 +238,8 @@ def _render_waiver_section(plan):
     # doesn't yet but whom the rest of the market is buying. Listing a
     # kicker worth +0.1 pts next to a QB worth +17.6 buried the second kind
     # and padded the brief with noise.
-    upgrades = [t for t in plan.targets if t.marginal_value >= WAIVER_NOISE_POINTS]
-    speculative = [
-        t for t in plan.targets
-        if t.marginal_value < WAIVER_NOISE_POINTS and t.trending_count
-    ]
-    speculative.sort(key=lambda t: t.trending_count, reverse=True)
+    upgrades = model.upgrades
+    speculative = model.speculative
 
     lines.append("")
     lines.append("### Upgrades for this week")
@@ -280,10 +247,8 @@ def _render_waiver_section(plan):
         lines.append("")
         lines.append("Nothing on the wire would improve your starting lineup this week.")
     else:
-        by_position = {}
-        for target in upgrades:
-            by_position.setdefault(target.player.position, []).append(target)
-        for position in sorted(by_position):
+        by_position = upgrades_by_position(model)
+        for position in by_position:
             lines.append("")
             lines.append(f"**{position}**")
             lines.append("")
@@ -303,7 +268,7 @@ def _render_waiver_section(plan):
         lines.append("")
         lines.append("| Player | Pos | Being added in |")
         lines.append("|:--|:--|--:|")
-        for target in speculative[:5]:
+        for target in speculative:
             player = target.player
             lines.append(f"| {player.name} `{player.team}` | {player.position} | {target.trending_count:,} leagues |")
 

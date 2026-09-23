@@ -268,3 +268,24 @@ def test_sync_with_origin_warns_instead_of_guessing_when_diverged(tmp_path, caps
 
 def test_sync_with_origin_returns_false_when_not_a_git_repo(tmp_path):
     assert _sync_with_origin(repo_root=tmp_path) is False
+
+
+def test_sync_with_origin_does_not_restart_when_merely_ahead(tmp_path, capsys):
+    """Regression: a checkout with unpushed local commits is AHEAD of origin,
+    not behind it. Differing hashes alone used to reach the ff-merge, which
+    succeeded doing nothing, reported "Pulled 0 commit(s)" and returned True
+    -- and main() re-executed the process on that True, forever. Every
+    command hung until the local commits happened to be pushed."""
+    origin = tmp_path / "origin"
+    clone = tmp_path / "clone"
+    origin.mkdir()
+    _init_repo(origin)
+    _commit(origin, "v1")
+    subprocess.run(["git", "clone", "-q", str(origin), str(clone)], check=True)
+    _commit(clone, "local work not yet pushed")
+
+    result = _sync_with_origin(repo_root=clone)
+
+    assert result is False
+    assert "Pulled" not in capsys.readouterr().out
+    assert (clone / "f.txt").read_text() == "local work not yet pushed"

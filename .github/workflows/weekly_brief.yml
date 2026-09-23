@@ -14,10 +14,9 @@ permissions:
   issues: write
 
 env:
-  # Who gets @-mentioned on each brief. The mention is what actually
-  # delivers the email: repo-watch notifications can be off or filtered,
-  # but "Participating and @mentions" is on by default and is the setting
-  # people are least likely to have turned off.
+  # Fallback delivery only -- see the "Deliver" steps below. The @-mention is
+  # what makes GitHub send a notification email: repo-watch notifications can
+  # be off or filtered, but "Participating and @mentions" is on by default.
   BRIEF_RECIPIENT: j-money-b
   BRIEF_THREAD_TITLE: "Weekly briefs"
 
@@ -34,8 +33,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Both renderings come from one gather + one waiver plan (brief_model.py),
+      # so the emailed brief and the archived thread can never disagree about
+      # what this week's recommendation is.
       - name: Generate brief
-        run: python -m ffai.cli brief --out brief.md
+        run: |
+          set -euo pipefail
+          python -m ffai.cli brief --out brief.md --subject-out subject.txt
+          python -m ffai.cli brief --format html --out brief.html
 
       - name: Commit brief
         run: |
@@ -45,12 +50,33 @@ jobs:
           git diff --cached --quiet && echo "No changes to commit" || git commit -m "Update weekly brief"
           git push
 
-      # brief.md in the repo is the archive; this is the delivery. Posting
-      # the brief as a comment on one long-lived issue makes GitHub send it
-      # as a notification email, with no SMTP server or app password to
-      # store as a secret. One thread rather than an issue per run so a
-      # season's worth of briefs stays readable in date order.
-      - name: Deliver brief as a notification
+      # Primary delivery: a real HTML email, so the styled brief lands in the
+      # inbox rather than being something to go and look for. Skipped cleanly
+      # when SMTP secrets aren't configured yet, and never fails the run --
+      # the fallback below covers both cases.
+      - name: Deliver brief by email
+        id: email
+        continue-on-error: true
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          BRIEF_TO: ${{ secrets.BRIEF_TO }}
+          BRIEF_FROM: ${{ secrets.BRIEF_FROM }}
+        run: |
+          if [ -z "${SMTP_HOST:-}" ]; then
+            echo "SMTP not configured -- falling back to the GitHub issue thread."
+            exit 1
+          fi
+          python scripts/send_brief_email.py brief.html subject.txt brief.md
+
+      # Fallback delivery: posting to one long-lived issue makes GitHub send a
+      # notification email with no SMTP credentials involved. Runs only when
+      # the email didn't go out, so a working setup doesn't double-notify --
+      # but a broken one still reaches the user rather than going silent (R1).
+      - name: Deliver brief as a GitHub notification
+        if: steps.email.outcome != 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -75,3 +101,11 @@ jobs:
 
           gh issue comment "$issue" --body-file comment.md
           echo "Posted brief to issue #$issue"
+
+      - name: Report delivery
+        run: |
+          if [ "${{ steps.email.outcome }}" = "success" ]; then
+            echo "Delivered by email."
+          else
+            echo "Email not sent -- delivered to the GitHub issue thread instead."
+          fi

@@ -136,22 +136,31 @@ def rank_waiver_targets(free_agents, my_players, roster_positions, trending_coun
     else:
         targets.sort(key=lambda t: (t.marginal_value, t.trending_count or 0), reverse=True)
 
-    # One gaping roster hole otherwise floods the entire list: with a QB
-    # ruled out, every one of the top 15 targets by marginal value is a QB,
-    # hiding every RB/WR/TE opportunity on the wire. Capping per position
-    # keeps the ranking honest while still showing the rest of the board.
     if limit_per_position:
-        seen = Counter()
-        kept = []
-        for target in targets:
-            position = target.player.position
-            if seen[position] >= limit_per_position:
-                continue
-            seen[position] += 1
-            kept.append(target)
-        targets = kept
+        targets = cap_per_position(targets, limit_per_position)
 
     return targets[:limit]
+
+
+def cap_per_position(targets, per_position):
+    """Keeps only the best `per_position` targets at each position, preserving
+    the incoming ranking order.
+
+    One gaping roster hole otherwise floods the entire list: with a QB ruled
+    out, every one of the top 15 targets by marginal value is a QB, hiding
+    every RB/WR/TE opportunity on the wire. Separate from ranking so callers
+    that want both views can rank ONCE -- ranking scores each free agent by
+    re-optimizing the whole lineup, so doing it twice over a full waiver pool
+    is thousands of redundant optimizations."""
+    seen = Counter()
+    kept = []
+    for target in targets:
+        position = target.player.position
+        if seen[position] >= per_position:
+            continue
+        seen[position] += 1
+        kept.append(target)
+    return kept
 
 
 def faab_bid_ranges(targets, remaining_budget, gap_multiplier=2.0):
@@ -302,6 +311,9 @@ def build_waiver_plan(context, byes_by_team=None, per_position=DISPLAY_PER_POSIT
     free_agents = compute_free_agents(
         context.players_raw, context.rosters, context.projections, scoring_settings, byes_by_team
     )
+    # Ranked ONCE. Each ranked player costs a full lineup re-optimization, so
+    # ranking the pool a second time to get the position-capped view made the
+    # brief take minutes instead of seconds. Both views come from this list.
     ranked = rank_waiver_targets(
         free_agents,
         context.my_players,
@@ -310,21 +322,12 @@ def build_waiver_plan(context, byes_by_team=None, per_position=DISPLAY_PER_POSIT
         projections_degraded=context.projections_degraded,
         limit=BID_POOL_SIZE,
     )
-    # `limit` has to accommodate the per-position cap, or the flat truncation
-    # re-creates exactly the flooding the cap exists to prevent: 6 positions x
-    # 3 each is 18 targets, and the default limit of 15 was cutting the tail --
-    # which, because the list is still value-sorted, meant the QB-flooded top
-    # survived and RB dropped to a single entry.
-    positions = {p.position for p in free_agents}
-    targets = rank_waiver_targets(
-        free_agents,
-        context.my_players,
-        context.roster_positions,
-        trending_counts=context.trending_counts,
-        projections_degraded=context.projections_degraded,
-        limit=max(len(positions) * per_position, BID_POOL_SIZE),
-        limit_per_position=per_position,
-    )
+    # Capped from the same ranking rather than re-ranked: the cap must not be
+    # re-truncated by a flat limit afterwards, or it re-creates exactly the
+    # flooding it exists to prevent (6 positions x 3 is 18 targets, and a flat
+    # limit of 15 cut the tail -- so the QB-flooded top survived and RB
+    # dropped to a single entry).
+    targets = cap_per_position(ranked, per_position)
 
     faab = is_faab(league_settings)
     remaining = None

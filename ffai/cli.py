@@ -7,6 +7,8 @@ from pathlib import Path
 
 from ffai.adp import AdpFetchError, fetch_adp
 from ffai.brief import render_brief_markdown
+from ffai.email_brief import email_subject, render_brief_html
+from ffai.brief_model import build_brief_model
 from ffai.byes import load_bye_weeks
 from ffai.cache import Cache
 from ffai.config import CACHE_DB_PATH, DRAFT_POLL_INTERVAL_SECONDS, LEAGUE_ID, SLEEPER_USERNAME
@@ -357,13 +359,23 @@ def cmd_brief(args):
     cache = Cache(db_path=CACHE_DB_PATH)
 
     context = gather_weekly_context(client, cache, args.league_id, week=args.week)
-    markdown = render_brief_markdown(context, waiver_plan=build_waiver_plan(context, byes_by_team=context.byes_by_team))
+    plan = build_waiver_plan(context, byes_by_team=context.byes_by_team)
+
+    if args.format == "html":
+        rendered = render_brief_html(context, waiver_plan=plan)
+    else:
+        rendered = render_brief_markdown(context, waiver_plan=plan)
+
+    if args.subject_out:
+        # The workflow reads this to set the email subject, so the inbox
+        # preview says whether action is needed without opening the mail.
+        Path(args.subject_out).write_text(email_subject(build_brief_model(context, plan)), encoding="utf-8")
 
     if args.out:
-        Path(args.out).write_text(markdown, encoding="utf-8")
+        Path(args.out).write_text(rendered, encoding="utf-8")
         print(f"Brief written to {args.out}")
     else:
-        print(markdown)
+        print(rendered)
     return 0
 
 
@@ -404,6 +416,14 @@ def build_parser():
     brief_parser.add_argument("--league-id", default=LEAGUE_ID, help="League ID (default: configured league)")
     brief_parser.add_argument("--week", type=int, default=None, help="Week override (default: auto-detected)")
     brief_parser.add_argument("--out", default=None, help="Write the brief to this file instead of stdout")
+    brief_parser.add_argument(
+        "--format", choices=["markdown", "html"], default="markdown",
+        help="markdown for the GitHub thread (default), html for the emailed version",
+    )
+    brief_parser.add_argument(
+        "--subject-out", default=None,
+        help="Also write a one-line email subject to this file",
+    )
     brief_parser.set_defaults(func=cmd_brief)
 
     refresh_parser = subparsers.add_parser("refresh", help="Escape hatch: force a fresh pull, print start/sit + waiver summary")
@@ -466,7 +486,16 @@ def _sync_with_origin(repo_root=None):
         if not local or not remote or local == remote:
             return False
 
+        # Differing hashes are NOT enough to justify a restart: a checkout with
+        # unpushed local commits is ahead of origin, not behind it. That case
+        # used to reach the ff-merge below, which succeeded doing nothing,
+        # reported "Pulled 0 commit(s)" and re-executed -- an infinite restart
+        # loop that hung every command until the local commits were pushed.
+        # Only an actual commit count behind origin warrants re-running.
         behind = run("rev-list", "--count", f"{local}..{remote}").stdout.strip()
+        if not behind.isdigit() or int(behind) == 0:
+            return False
+
         pulled = run("merge", "--ff-only", f"origin/{branch}")
         if pulled.returncode == 0:
             print(f"Pulled {behind} commit(s) from origin/{branch} -- restarting with the updated code...")
