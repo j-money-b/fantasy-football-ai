@@ -73,12 +73,17 @@ class TradeSideResult:
     net_vorp: float  # value_received - value_sent
     lineup_delta: float  # change in this team's optimal season-aggregate lineup total, after vs. before
     bye_week_warnings: list  # list[str]
+    availability_warnings: list = field(default_factory=list)  # players in this trade who currently cannot play
 
 
 @dataclass
 class TradeEvaluation:
     sides: list  # list[TradeSideResult], one per team
     verdict: str
+    # True when every player involved is currently available, so the
+    # projection-based verdict can be taken at face value. False means a
+    # player in the deal cannot play right now and the numbers assume he can.
+    projections_trustworthy: bool = True
 
 
 @dataclass

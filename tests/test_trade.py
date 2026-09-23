@@ -169,3 +169,96 @@ def test_format_trade_evaluation_renders_both_sides_and_verdict():
     assert "Sends: RB-a1" in text
     assert "Receives: WR-b1" in text
     assert "Verdict:" in text
+
+
+# --- availability ----------------------------------------------------------
+# Regression: the season board values every player at a healthy full-season
+# projection. A player on the inactive list was priced at 139 season points
+# and a QB with a dislocated elbow at 309, because nothing read the status
+# field the brief had been using all along.
+
+def _raw(**statuses):
+    return {pid: {"injury_status": status} for pid, status in statuses.items()}
+
+
+def _by_id(players):
+    return {p.player_id: p for p in players}
+
+
+def test_unavailable_player_received_is_flagged():
+    board = _by_id([_pv("a", "RB", 139.4, vorp=-35.4), _pv("b", "RB", 200.0, vorp=20.0)])
+    party_a = TradeParty(label="Me", roster_player_ids=["b"], sends_ids=["b"])
+    party_b = TradeParty(label="Them", roster_player_ids=["a"], sends_ids=["a"])
+
+    result = evaluate_trade(party_a, party_b, board, ["RB"], players_raw=_raw(a="NA"))
+
+    warnings = result.sides[0].availability_warnings
+    assert any("CANNOT PLAY" in w for w in warnings)
+    assert any("8.2 pts of it per game missed" in w for w in warnings)
+
+
+def test_verdict_refuses_to_judge_when_a_player_cannot_play():
+    board = _by_id([_pv("a", "RB", 139.4, vorp=-35.4), _pv("b", "RB", 200.0, vorp=20.0)])
+    party_a = TradeParty(label="Me", roster_player_ids=["b"], sends_ids=["b"])
+    party_b = TradeParty(label="Them", roster_player_ids=["a"], sends_ids=["a"])
+
+    result = evaluate_trade(party_a, party_b, board, ["RB"], players_raw=_raw(a="Out"))
+
+    assert result.projections_trustworthy is False
+    assert "CANNOT BE JUDGED ON PROJECTIONS ALONE" in result.verdict
+
+
+def test_questionable_is_noted_but_does_not_void_the_verdict():
+    board = _by_id([_pv("a", "RB", 226.5, vorp=62.9), _pv("b", "RB", 150.0, vorp=-20.0)])
+    party_a = TradeParty(label="Me", roster_player_ids=["b"], sends_ids=["b"])
+    party_b = TradeParty(label="Them", roster_player_ids=["a"], sends_ids=["a"])
+
+    result = evaluate_trade(party_a, party_b, board, ["RB"], players_raw=_raw(a="Questionable"))
+
+    assert result.projections_trustworthy is True
+    assert "CANNOT BE JUDGED" not in result.verdict
+    assert any("usually still plays" in w for w in result.sides[0].availability_warnings)
+
+
+def test_healthy_trade_is_unchanged_and_still_gets_a_real_verdict():
+    board = _by_id([_pv("a", "RB", 200.0, vorp=20.0), _pv("b", "RB", 150.0, vorp=-20.0)])
+    party_a = TradeParty(label="Me", roster_player_ids=["b"], sends_ids=["b"])
+    party_b = TradeParty(label="Them", roster_player_ids=["a"], sends_ids=["a"])
+
+    result = evaluate_trade(party_a, party_b, board, ["RB"], players_raw={})
+
+    assert result.projections_trustworthy is True
+    assert result.sides[0].availability_warnings == []
+
+
+def test_injury_detail_is_surfaced_not_just_the_status():
+    board = _by_id([_pv("a", "QB", 308.7, vorp=12.2), _pv("b", "RB", 150.0, vorp=-20.0)])
+    party_a = TradeParty(label="Me", roster_player_ids=["b"], sends_ids=["b"])
+    party_b = TradeParty(label="Them", roster_player_ids=["a"], sends_ids=["a"])
+    raw = {"a": {"injury_status": "Out", "injury_body_part": "Elbow", "injury_notes": "Dislocated"}}
+
+    result = evaluate_trade(party_a, party_b, board, ["QB"], players_raw=raw)
+
+    assert any("Elbow - Dislocated" in w for w in result.sides[0].availability_warnings)
+
+
+def test_unavailable_player_still_starting_after_the_trade_is_flagged():
+    """The two players swapped can both be perfectly healthy and the verdict
+    still be computed against a lineup total that assumes a ruled-out starter
+    suits up. Flagging only the traded players misses that entirely."""
+    board = _by_id([
+        _pv("mine-qb", "QB", 308.7, vorp=12.2),
+        _pv("mine-rb", "RB", 150.0, vorp=-20.0),
+        _pv("theirs", "RB", 200.0, vorp=20.0),
+    ])
+    party_a = TradeParty(label="Me", roster_player_ids=["mine-qb", "mine-rb"], sends_ids=["mine-rb"])
+    party_b = TradeParty(label="Them", roster_player_ids=["theirs"], sends_ids=["theirs"])
+    raw = {"mine-qb": {"injury_status": "Out", "injury_body_part": "Elbow", "injury_notes": "Dislocated"}}
+
+    result = evaluate_trade(party_a, party_b, board, ["QB", "RB"], players_raw=raw)
+
+    warnings = result.sides[0].availability_warnings
+    assert any("still counts QB-mine-qb at QB" in w for w in warnings)
+    assert any("inflated" in w for w in warnings)
+    # The traded players are both healthy, so the verdict itself stands.
+    assert result.projections_trustworthy is True

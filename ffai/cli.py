@@ -226,7 +226,7 @@ def cmd_trade(args):
         sends_ids=receive_ids,
     )
 
-    evaluation = evaluate_trade(party_a, party_b, board_by_id, roster_positions)
+    evaluation = evaluate_trade(party_a, party_b, board_by_id, roster_positions, players_raw=players_raw)
     print(format_trade_evaluation(evaluation))
     return 0
 
