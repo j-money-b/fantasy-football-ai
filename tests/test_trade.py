@@ -122,9 +122,9 @@ def test_evaluate_trade_verdict_win_win():
     # missing position genuinely helps both starting lineups.
     board = {
         "rb_a1": _pv("rb_a1", "RB", 15.0, vorp=10.0),
-        "rb_a2": _pv("rb_a2", "RB", 2.0, vorp=-3.0),
+        "rb_a2": _pv("rb_a2", "RB", 12.0, vorp=-3.0),
         "wr_b1": _pv("wr_b1", "WR", 15.0, vorp=10.0),
-        "wr_b2": _pv("wr_b2", "WR", 2.0, vorp=-3.0),
+        "wr_b2": _pv("wr_b2", "WR", 12.0, vorp=-3.0),
     }
     roster_positions = ["RB", "WR", "BN"]
     party_a = TradeParty(label="You", roster_player_ids=["rb_a1", "rb_a2"], sends_ids=["rb_a2"])
@@ -134,10 +134,13 @@ def test_evaluate_trade_verdict_win_win():
 
     assert evaluation.sides[0].lineup_delta > 0
     assert evaluation.sides[1].lineup_delta > 0
-    assert "win-win" in evaluation.verdict
+    assert "MUTUAL" in evaluation.verdict
 
 
-def test_evaluate_trade_verdict_favors_one_side():
+def test_evaluate_trade_verdict_names_the_refusal_not_the_win():
+    # A deal that is great for the user and bad for the counterparty is a deal
+    # that does not happen. The verdict must lead with the refusal rather than
+    # reporting the user's gain as a result worth acting on.
     board = {
         "great_rb": _pv("great_rb", "RB", 20.0, vorp=15.0),
         "meh_wr": _pv("meh_wr", "WR", 5.0, vorp=0.0),
@@ -148,7 +151,34 @@ def test_evaluate_trade_verdict_favors_one_side():
 
     evaluation = evaluate_trade(party_a, party_b, board, roster_positions)
 
-    assert "Favors You" in evaluation.verdict
+    assert "THEY DECLINE" in evaluation.verdict
+    assert "Rival" in evaluation.verdict
+    assert "Favors You" not in evaluation.verdict
+
+
+def test_evaluate_trade_verdict_flags_counterparty_sending_their_best():
+    # Both lineups improve, but the counterparty is giving up the best player
+    # on their roster for a small gain -- the Jeanty-for-Smith-Njigba shape.
+    board = {
+        "my_rb1": _pv("my_rb1", "RB", 30.0, vorp=25.0),
+        "my_rb2": _pv("my_rb2", "RB", 28.0, vorp=23.0),
+        "my_wr": _pv("my_wr", "WR", 3.0, vorp=-8.0),
+        "their_wr1": _pv("their_wr1", "WR", 31.0, vorp=26.0),
+        "their_wr2": _pv("their_wr2", "WR", 27.0, vorp=22.0),
+        "their_rb": _pv("their_rb", "RB", 4.0, vorp=-7.0),
+    }
+    roster_positions = ["RB", "WR", "BN"]
+    party_a = TradeParty(
+        label="You", roster_player_ids=["my_rb1", "my_rb2", "my_wr"], sends_ids=["my_rb2"]
+    )
+    party_b = TradeParty(
+        label="Rival", roster_player_ids=["their_wr1", "their_wr2", "their_rb"], sends_ids=["their_wr1"]
+    )
+
+    evaluation = evaluate_trade(party_a, party_b, board, roster_positions)
+
+    assert evaluation.sides[1].sends_roster_best is True
+    assert "UNLIKELY" in evaluation.verdict or "DECLINE" in evaluation.verdict
 
 
 # --- format_trade_evaluation --------------------------------------------------

@@ -235,6 +235,45 @@ same way silence does.
 - Account for roster construction, positional need, bye weeks
 - Rest-of-season outlook, not just current-week value
 
+### 6.4b A Trade the Other Manager Refuses Is Worth Zero
+
+**The gap this closes.** The evaluator scored both sides from the start, and
+the verdict line still led with which side the deal favored. That inverts the
+decision. "Favors you" describes a trade the other manager declines, and an
+unsendable trade has no value — it is not a good deal, it is not a deal.
+
+Observed failure (2026-09-28, Week 4): every trade this tool reported as
+favoring its user was refused by the counterparty — two hard-refused in
+conversation, one never answered. The tool then scored sending a healthy RB8
+for the counterparty's WR3 at **+31.4 for the user and +2.8 for them**, and
+that was surfaced as the headline recommendation. No manager trades the best
+player on their roster for a rounding error. The user, who is new to fantasy
+football, caught this before the tool did.
+
+**Requirement.** The verdict answers **"would they accept?" before "do I
+win?"**, and is gated on the counterparty's `lineup_delta`:
+
+- **Counterparty loses** → `THEY DECLINE`. The user's gain is reported as
+  irrelevant, because it is.
+- **Counterparty gains less than `MEANINGFUL_GAIN` (5.0 season pts)** →
+  `THEY PROBABLY DECLINE`. A gain inside the noise is not a reason to say yes.
+- **Counterparty is sending the highest-VORP player on their own roster**
+  (`sends_roster_best`) → escalates to `UNLIKELY` even when both sides gain.
+  Managers do not trade their best player at a technical margin.
+- **User's gain exceeds `LOPSIDED_RATIO` (3x) the counterparty's** →
+  `SENDABLE BUT LOPSIDED`. It reads as a fleece when said out loud; expect a
+  counter, consider sweetening first.
+- **Both gain meaningfully** → `MUTUAL -- send it`.
+
+**Corollary for offer generation.** Candidate trades are found by scanning for
+swaps where *both* sides' optimal lineups improve, not by ranking what the
+user would most like to receive. The counterparty's roster holes are the
+search space; the user's wishlist is not.
+
+**Honest consequence.** This will often return nothing. A week where no
+mutually beneficial trade exists is a real and common state, and reporting
+"nothing sendable" is correct output, not a failure to find an answer.
+
 ### 6.4a Trades Require a News Layer, Not Just Projections
 
 **The gap this closes.** Projections are a *consensus average*, computed before the

@@ -74,6 +74,7 @@ class TradeSideResult:
     lineup_delta: float  # change in this team's optimal season-aggregate lineup total, after vs. before
     bye_week_warnings: list  # list[str]
     availability_warnings: list = field(default_factory=list)  # players in this trade who currently cannot play
+    sends_roster_best: bool = False  # this side is giving up the highest-VORP player on its own roster
 
 
 @dataclass

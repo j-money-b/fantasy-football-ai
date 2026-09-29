@@ -95,6 +95,9 @@ def _evaluate_side(party, other_party, board_by_id, roster_positions, players_ra
     after = optimize_lineup(roster_after, roster_positions)
     lineup_after = after.total_points
 
+    best_on_roster = max(current_roster, key=lambda p: p.vorp, default=None)
+    sends_roster_best = best_on_roster is not None and best_on_roster.player_id in sends_ids
+
     return TradeSideResult(
         label=party.label,
         sends=sends,
@@ -108,6 +111,7 @@ def _evaluate_side(party, other_party, board_by_id, roster_positions, players_ra
             _availability_warnings(sends, receives, players_raw or {})
             + _unavailable_in_lineup(after, players_raw or {})
         ),
+        sends_roster_best=sends_roster_best,
     )
 
 
@@ -196,21 +200,76 @@ def _unavailable_in_lineup(lineup, players_raw):
     return warnings
 
 
+# A counterparty needs a real reason to say yes, not a rounding error. Below
+# this many season points of lineup gain, "they benefit too" is noise and the
+# realistic answer is a decline or a counter.
+MEANINGFUL_GAIN = 5.0
+# Above this ratio the deal reads as lopsided when it is read aloud, even if
+# both sides technically gain -- managers reject deals that look like a fleece.
+LOPSIDED_RATIO = 3.0
+
+
 def _verdict(side_a, side_b, trustworthy=True):
+    """Answers "would they accept?" BEFORE "do I win?".
+
+    An earlier version led with which side the deal favored, which inverted
+    the actual decision: a verdict of "favors you" describes a trade the
+    other manager declines, and an unsendable trade is worth nothing. Every
+    deal this tool scored as favoring its user in Week 3 was refused. So the
+    counterparty's lineup_delta is the gate, and the user's gain is only
+    reported once the deal is plausibly sendable."""
     if not trustworthy:
         return (
             "CANNOT BE JUDGED ON PROJECTIONS ALONE -- a player in this deal cannot currently play, "
             "and the season projections above assume he plays every game. Decide how many games you "
             "expect him to miss before trusting any number here."
         )
-    if side_a.lineup_delta > 0 and side_b.lineup_delta > 0:
-        return "Both teams' optimal lineups improve -- looks like a win-win (redundant depth moved to where it's useful)."
-    if side_a.lineup_delta == side_b.lineup_delta:
-        return "Roughly even -- neither side's optimal lineup gains more than the other."
-    favors = side_a.label if side_a.lineup_delta > side_b.lineup_delta else side_b.label
+
+    mine, theirs = side_a, side_b
+
+    if theirs.lineup_delta <= 0:
+        return (
+            f"THEY DECLINE. {theirs.label} loses {abs(theirs.lineup_delta):.1f} pts of optimal lineup. "
+            f"Your {mine.lineup_delta:+.1f} is irrelevant -- a trade they refuse is worth nothing. "
+            f"Find what {theirs.label} actually needs and rebuild the offer around that."
+        )
+
+    if theirs.lineup_delta < MEANINGFUL_GAIN:
+        extra = (
+            f" They would also be giving up the best player on their roster "
+            f"({', '.join(p.name for p in theirs.sends)}), which no manager does for this little."
+            if theirs.sends_roster_best else ""
+        )
+        return (
+            f"THEY PROBABLY DECLINE. {theirs.label} gains only {theirs.lineup_delta:+.1f} pts -- "
+            f"inside the noise, not a reason to say yes.{extra} "
+            f"Expect a counter rather than an acceptance."
+        )
+
+    if mine.lineup_delta <= 0:
+        return (
+            f"SENDABLE, BUT DON'T. {theirs.label} gains {theirs.lineup_delta:+.1f} pts and you lose "
+            f"{abs(mine.lineup_delta):.1f}. They would say yes, which is the problem."
+        )
+
+    if theirs.sends_roster_best:
+        return (
+            f"UNLIKELY. Both lineups improve (you {mine.lineup_delta:+.1f}, {theirs.label} "
+            f"{theirs.lineup_delta:+.1f}), but {theirs.label} is sending the best player on their "
+            f"roster ({', '.join(p.name for p in theirs.sends)}). Managers rarely trade their best "
+            f"player even at a technical gain. Worth asking, not worth planning around."
+        )
+
+    if mine.lineup_delta > theirs.lineup_delta * LOPSIDED_RATIO:
+        return (
+            f"SENDABLE BUT LOPSIDED. Both gain (you {mine.lineup_delta:+.1f}, {theirs.label} "
+            f"{theirs.lineup_delta:+.1f}), but yours is {mine.lineup_delta / theirs.lineup_delta:.1f}x "
+            f"theirs. Expect a counter; consider sweetening before they feel fleeced."
+        )
+
     return (
-        f"Favors {favors} by starting-lineup impact "
-        f"({side_a.label}: {side_a.lineup_delta:+.1f} pts, {side_b.label}: {side_b.lineup_delta:+.1f} pts)."
+        f"MUTUAL -- send it. Both optimal lineups improve (you {mine.lineup_delta:+.1f}, "
+        f"{theirs.label} {theirs.lineup_delta:+.1f}); redundant depth moving to where it is useful."
     )
 
 
