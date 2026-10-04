@@ -1,6 +1,6 @@
 # Week 4 Brief
 
-`Last successful run: 2026-09-29 18:21 UTC`
+`Last successful run: 2026-10-04 17:08 UTC`
 
 > [!NOTE]
 > **No lineup holes.** Every starting slot is filled by someone playing this week.
@@ -9,36 +9,29 @@
 
 ## Your Lineup
 
-**Projected total: 123.1 pts** *(recommended lineup)*
+**Projected total: 127.9 pts** *(recommended lineup)*
 
 | Slot | Player | Proj | |
 |:--|:--|--:|:--|
-| **QB** | Bo Nix `DEN` | **17.9** | `██████████░░` |
+| **QB** | Bo Nix `DEN` | **18.2** | `██████████░░` |
 | **RB** | Ashton Jeanty `LV` | **15.6** | `████████░░░░` |
-| **RB** | Chuba Hubbard `CAR` | **16.3** | `█████████░░░` |
-| **WR** | Emeka Egbuka `TB` | **10.4** | `██████░░░░░░` |
+| **RB** | Chuba Hubbard `CAR` | **16.4** | `█████████░░░` |
+| **WR** | Emeka Egbuka `TB` | **10.8** | `██████░░░░░░` |
 | **WR** | Drake London `ATL` | **16.2** | `█████████░░░` |
-| **TE** | Tyler Warren `IND` | **11.2** | `██████░░░░░░` |
-| **FLEX** | Bijan Robinson `ATL` | **22.1** | `████████████` |
+| **TE** | Tyler Warren `IND` | **12.7** | `███████░░░░░` |
+| **FLEX** | Bijan Robinson `ATL` | **22.3** | `████████████` |
 | **K** | Ka'imi Fairbairn `HOU` | **7.1** | `████░░░░░░░░` |
-| **DEF** | Detroit Lions `DET` | **6.5** | `████░░░░░░░░` |
-
-**Changes vs. your currently-set lineup**
-
-| | Player |
-|:--|:--|
-| **Start** | Chuba Hubbard (RB) -- 16.3 pts |
-| **Sit** | Breece Hall (RB) -- 0.0 pts |
+| **DEF** | Green Bay Packers `GB` | **8.7** | `█████░░░░░░░` |
 
 **Bench**
 
 | Player | Proj | |
 |:--|--:|:--|
-| Rico Dowdle `PIT` **[Out]** `depth: RB2` | 9.9 | `█████░░░░░░░` |
-| Courtland Sutton `DEN` `depth: LWR2` | 9.8 | `█████░░░░░░░` |
-| Michael Pittman `PIT` `depth: RWR2` | 9.5 | `█████░░░░░░░` |
+| Courtland Sutton `DEN` `depth: LWR2` | 10.0 | `█████░░░░░░░` |
+| Michael Pittman `PIT` `depth: RWR2` | 9.3 | `█████░░░░░░░` |
 | Jayden Daniels `WAS` **[Out]** `depth: QB2` | 0.0 | `░░░░░░░░░░░░` |
-| Breece Hall `NYJ` **[Out]** `depth: RB2` | 0.0 | `░░░░░░░░░░░░` |
+| Rico Dowdle `PIT` **[Out]** `depth: RB4` | 0.0 | `░░░░░░░░░░░░` |
+| Breece Hall `NYJ` **[Out]** `depth: RB5` | 0.0 | `░░░░░░░░░░░░` |
 
 ---
 
@@ -48,24 +41,24 @@ Facing **peetypablo**.
 
 | | Projected | |
 |:--|--:|:--|
-| **You** | **123.1** | `████████████` |
-| **peetypablo** | **123.2** | `████████████` |
+| **You** | **127.9** | `████████████` |
+| **peetypablo** | **131.7** | `████████████` |
 
-You're projected to **lose by 0.1**.
+You're projected to **lose by 3.8**.
 
 **peetypablo's currently-set starters**
 
 | Player | Proj |
 |:--|--:|
 | Dak Prescott (QB, DAL) | 18.3 |
-| TreVeyon Henderson (RB, NE) | 9.6 |
-| Chase Brown (RB, CIN) | 17.7 |
-| Parker Washington (WR, JAX) | 16.8 |
-| Amon-Ra St. Brown (WR, DET) | 17.9 |
-| Mark Andrews (TE, BAL) | 8.6 |
+| Braelon Allen (RB, NYJ) | 12.8 |
+| Chase Brown (RB, CIN) | 17.4 |
+| Zay Flowers (WR, BAL) | 16.1 |
+| Amon-Ra St. Brown (WR, DET) | 18.8 |
 | Brock Bowers (TE, LV) | 15.3 |
-| Jake Bates (K, DET) | 6.4 |
-| Minnesota Vikings (DEF, MIN) | 12.7 |
+| Parker Washington (WR, JAX) | 17.2 |
+| Jake Bates (K, DET) | 6.3 |
+| Minnesota Vikings (DEF, MIN) | 9.4 |
 
 ---
 
@@ -77,31 +70,11 @@ You're projected to **lose by 0.1**.
 
 ### Upgrades for this week
 
-**DEF**
-
-| Player | Adds | Bid | Notes |
-|:--|--:|:--|:--|
-| Baltimore Ravens `BAL` | **+3.3** | **$20-$35** | trending in 229,377 leagues |
-| Chicago Bears `CHI` | **+2.0** | **$2-$8** | trending in 70,475 leagues |
-| Green Bay Packers `GB` | **+1.9** | **$2-$8** | trending in 15,660 leagues |
-
 **QB**
 
 | Player | Adds | Bid | Notes |
 |:--|--:|:--|:--|
-| Kyler Murray `MIN` | **+1.1** | **$2-$8** | trending in 58,632 leagues |
-
-**TE**
-
-| Player | Adds | Bid | Notes |
-|:--|--:|:--|:--|
-| Harold Fannin `CLE` | **+1.1** | **$2-$8** | trending in 48,610 leagues |
-
-**WR**
-
-| Player | Adds | Bid | Notes |
-|:--|--:|:--|:--|
-| Terry McLaurin `WAS` | **+1.2** | **$2-$8** | trending in 16,326 leagues |
+| Bryce Young `CAR` | **+1.1** | **$2-$8** | trending in 19,728 leagues |
 
 ### Speculative adds
 
@@ -109,8 +82,8 @@ These wouldn't crack your lineup today, but the rest of the market is buying -- 
 
 | Player | Pos | Being added in |
 |:--|:--|--:|
-| Ollie Gordon `MIA` | RB | 5,205,487 leagues |
-| Braelon Allen `NYJ` | RB | 1,755,044 leagues |
-| Kenyon Sadiq `NYJ` | TE | 1,667,718 leagues |
-| Alvin Kamara `NO` | RB | 570,032 leagues |
-| Konata Mumpfield `LAR` | WR | 447,570 leagues |
+| Emanuel Wilson `SEA` | RB | 1,264,518 leagues |
+| Jauan Jennings `MIN` | WR | 452,788 leagues |
+| Roman Wilson `PIT` | WR | 391,338 leagues |
+| Brycen Tremayne `CAR` | WR | 312,291 leagues |
+| Darren Waller `CAR` | TE | 243,432 leagues |
