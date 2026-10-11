@@ -1,19 +1,19 @@
 # Week 5 Brief
 
-`Last successful run: 2026-10-06 18:40 UTC`
+`Last successful run: 2026-10-11 17:49 UTC`
 
 > [!CAUTION]
 > **1 lineup hole to fix before kickoff -- 1 critical.**
 >
-> - **RB** -- Breece Hall is listed **Out**
+> - **RB** -- Will Shipley is listed **Out**
 
 ## Action Required
 
-### 1. RB -- Breece Hall is listed **Out**
+### 1. RB -- Will Shipley is listed **Out**
 
 | | |
 |:--|:--|
-| In your lineup | Breece Hall `NYJ` -- **13.3** pts |
+| In your lineup | Will Shipley `PHI` -- **10.4** pts |
 | Best available | *nothing on the wire beats what you already have* |
 | Recommendation | **Hold.** Starting them is still your best option this week. |
 
@@ -21,36 +21,29 @@
 
 ## Your Lineup
 
-**Projected total: 122.9 pts** *(recommended lineup)*
+**Projected total: 119.3 pts** *(recommended lineup)*
 
 | Slot | Player | Proj | |
 |:--|:--|--:|:--|
-| **QB** | Bo Nix `DEN` | **17.6** | `█████████░░░` |
-| **RB** | Breece Hall `NYJ` **[Out]** `depth: RB5` | **13.3** | `███████░░░░░` |
-| **RB** | Ashton Jeanty `LV` | **16.0** | `████████░░░░` |
-| **WR** | Emeka Egbuka `TB` | **10.0** | `█████░░░░░░░` |
-| **WR** | Drake London `ATL` | **17.2** | `█████████░░░` |
-| **TE** | Tyler Warren `IND` | **11.2** | `██████░░░░░░` |
-| **FLEX** | Bijan Robinson `ATL` | **24.2** | `████████████` |
+| **QB** | Bo Nix `DEN` | **17.5** | `█████████░░░` |
+| **RB** | Will Shipley `PHI` **[Out]** | **10.4** | `█████░░░░░░░` |
+| **RB** | Ashton Jeanty `LV` | **12.8** | `██████░░░░░░` |
+| **WR** | Emeka Egbuka `TB` | **10.8** | `█████░░░░░░░` |
+| **WR** | Drake London `ATL` | **17.2** | `████████░░░░` |
+| **TE** | Tyler Warren `IND` | **10.6** | `█████░░░░░░░` |
+| **FLEX** | Bijan Robinson `ATL` | **24.3** | `████████████` |
 | **K** | Ka'imi Fairbairn `HOU` | **6.9** | `███░░░░░░░░░` |
-| **DEF** | Green Bay Packers `GB` | **6.3** | `███░░░░░░░░░` |
-
-**Changes vs. your currently-set lineup**
-
-| | Player |
-|:--|:--|
-| **Start** | Breece Hall (RB) -- 13.3 pts |
-| **Sit** | Chuba Hubbard (RB) -- 0.0 pts |
+| **DEF** | Dallas Cowboys `DAL` | **8.7** | `████░░░░░░░░` |
 
 **Bench**
 
 | Player | Proj | |
 |:--|--:|:--|
-| Jayden Daniels `WAS` **[Out]** `depth: QB2` | 17.1 | `████████░░░░` |
-| Rico Dowdle `PIT` **[Out]** `depth: RB4` | 10.1 | `█████░░░░░░░` |
+| Jayden Daniels `WAS` | 16.9 | `████████░░░░` |
 | Courtland Sutton `DEN` `depth: LWR2` | 8.8 | `████░░░░░░░░` |
-| Michael Pittman `PIT` `depth: RWR2` | 7.8 | `████░░░░░░░░` |
+| Rico Dowdle `PIT` **[Out]** `depth: RB2` | 0.0 | `░░░░░░░░░░░░` |
 | Chuba Hubbard `CAR` | 0.0 | `░░░░░░░░░░░░` |
+| Breece Hall `NYJ` **[Out]** `depth: RB5` | 0.0 | `░░░░░░░░░░░░` |
 
 ---
 
@@ -60,24 +53,24 @@ Facing **ASTRONUTZ69**.
 
 | | Projected | |
 |:--|--:|:--|
-| **You** | **122.9** | `████████████` |
-| **ASTRONUTZ69** | **82.7** | `████████░░░░` |
+| **You** | **119.3** | `███████████░` |
+| **ASTRONUTZ69** | **127.2** | `████████████` |
 
-You're projected to **win by 40.2**.
+You're projected to **lose by 8.0**.
 
 **ASTRONUTZ69's currently-set starters**
 
 | Player | Proj |
 |:--|--:|
-| Patrick Mahomes (QB, KC) | 0.0 |
-| Jonathan Taylor (RB, IND) | 18.8 |
-| Jaylen Warren (RB, PIT) | 15.1 |
-| Jaylen Waddle (WR, DEN) | 12.2 |
-| Rashee Rice (WR, KC) | 0.0 |
-| Harold Fannin (TE, CLE) | 11.0 |
-| Aaron Jones (RB, MIN) | 14.0 |
+| Matthew Stafford (QB, LAR) | 18.7 |
+| Jonathan Taylor (RB, IND) | 19.2 |
+| Jaylen Warren (RB, PIT) | 19.8 |
+| Justin Jefferson (WR, MIN) | 16.3 |
+| Jaylen Waddle (WR, DEN) | 12.1 |
+| Harold Fannin (TE, CLE) | 10.9 |
+| Aaron Jones (RB, MIN) | 14.9 |
 | Cam Little (K, JAX) | 6.5 |
-| Buffalo Bills (DEF, BUF) | 5.1 |
+| Cincinnati Bengals (DEF, CIN) | 8.9 |
 
 ---
 
@@ -89,20 +82,11 @@ You're projected to **win by 40.2**.
 
 ### Upgrades for this week
 
-**DEF**
-
-| Player | Adds | Bid | Notes |
-|:--|--:|:--|:--|
-| Cincinnati Bengals `CIN` | **+2.5** | **$2-$8** |  |
-| Jacksonville Jaguars `JAX` | **+2.3** | **$2-$8** | trending in 510,354 leagues |
-| Dallas Cowboys `DAL` | **+2.2** | **$2-$8** | trending in 48,300 leagues |
-
 **WR**
 
 | Player | Adds | Bid | Notes |
 |:--|--:|:--|:--|
-| Carnell Tate `TEN` | **+2.2** | **$2-$8** | trending in 17,574 leagues |
-| Romeo Doubs `NE` | **+1.1** | **$2-$8** | trending in 385,624 leagues |
+| Malik Washington `MIA` | **+1.0** | **$2-$8** | trending in 144,880 leagues |
 
 ### Speculative adds
 
@@ -110,8 +94,8 @@ These wouldn't crack your lineup today, but the rest of the market is buying -- 
 
 | Player | Pos | Being added in |
 |:--|:--|--:|
-| Emanuel Wilson `SEA` | RB | 1,106,739 leagues |
-| Will Shipley `PHI` | RB | 682,354 leagues |
-| Kirk Cousins `LV` | QB | 533,184 leagues |
-| Brian Robinson `ATL` | RB | 472,980 leagues |
-| Michael Mayer `LV` | TE | 332,478 leagues |
+| Roschon Johnson `CHI` | RB | 533,728 leagues |
+| Darius Cooper `PHI` | WR | 274,414 leagues |
+| Kendrick Bourne `ARI` | WR | 231,552 leagues |
+| Tyler Higbee `LAR` | TE | 208,872 leagues |
+| MarShawn Lloyd `GB` | RB | 155,043 leagues |
