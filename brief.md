@@ -1,76 +1,64 @@
-# Week 5 Brief
+# Week 6 Brief
 
-`Last successful run: 2026-10-11 17:49 UTC`
+`Last successful run: 2026-10-13 19:35 UTC`
 
-> [!CAUTION]
-> **1 lineup hole to fix before kickoff -- 1 critical.**
->
-> - **RB** -- Will Shipley is listed **Out**
-
-## Action Required
-
-### 1. RB -- Will Shipley is listed **Out**
-
-| | |
-|:--|:--|
-| In your lineup | Will Shipley `PHI` -- **10.4** pts |
-| Best available | *nothing on the wire beats what you already have* |
-| Recommendation | **Hold.** Starting them is still your best option this week. |
+> [!NOTE]
+> **No lineup holes.** Every starting slot is filled by someone playing this week.
 
 ---
 
 ## Your Lineup
 
-**Projected total: 119.3 pts** *(recommended lineup)*
+**Projected total: 125.2 pts** *(recommended lineup)*
 
 | Slot | Player | Proj | |
 |:--|:--|--:|:--|
-| **QB** | Bo Nix `DEN` | **17.5** | `█████████░░░` |
-| **RB** | Will Shipley `PHI` **[Out]** | **10.4** | `█████░░░░░░░` |
-| **RB** | Ashton Jeanty `LV` | **12.8** | `██████░░░░░░` |
-| **WR** | Emeka Egbuka `TB` | **10.8** | `█████░░░░░░░` |
-| **WR** | Drake London `ATL` | **17.2** | `████████░░░░` |
-| **TE** | Tyler Warren `IND` | **10.6** | `█████░░░░░░░` |
-| **FLEX** | Bijan Robinson `ATL` | **24.3** | `████████████` |
-| **K** | Ka'imi Fairbairn `HOU` | **6.9** | `███░░░░░░░░░` |
-| **DEF** | Dallas Cowboys `DAL` | **8.7** | `████░░░░░░░░` |
+| **QB** | Jayden Daniels `WAS` | **16.7** | `████████░░░░` |
+| **RB** | Ashton Jeanty `LV` | **13.9** | `███████░░░░░` |
+| **RB** | Chuba Hubbard `CAR` | **16.2** | `████████░░░░` |
+| **WR** | Emeka Egbuka `TB` | **10.0** | `█████░░░░░░░` |
+| **WR** | Drake London `ATL` | **18.3** | `█████████░░░` |
+| **TE** | Tyler Warren `IND` | **12.7** | `██████░░░░░░` |
+| **FLEX** | Bijan Robinson `ATL` | **25.3** | `████████████` |
+| **K** | Ka'imi Fairbairn `HOU` | **6.7** | `███░░░░░░░░░` |
+| **DEF** | Dallas Cowboys `DAL` | **5.4** | `███░░░░░░░░░` |
 
 **Bench**
 
 | Player | Proj | |
 |:--|--:|:--|
-| Jayden Daniels `WAS` | 16.9 | `████████░░░░` |
-| Courtland Sutton `DEN` `depth: LWR2` | 8.8 | `████░░░░░░░░` |
-| Rico Dowdle `PIT` **[Out]** `depth: RB2` | 0.0 | `░░░░░░░░░░░░` |
-| Chuba Hubbard `CAR` | 0.0 | `░░░░░░░░░░░░` |
-| Breece Hall `NYJ` **[Out]** `depth: RB5` | 0.0 | `░░░░░░░░░░░░` |
+| Bo Nix `DEN` | 14.2 | `███████░░░░░` |
+| Breece Hall `NYJ` **[Out]** | 12.3 | `██████░░░░░░` |
+| Courtland Sutton `DEN` `depth: LWR2` | 7.7 | `████░░░░░░░░` |
+| Rico Dowdle `PIT` **[Out]** `depth: RB2` | 7.0 | `███░░░░░░░░░` |
+| Will Shipley `PHI` **[Out]** `depth: RB5` | 0.0 | `░░░░░░░░░░░░` |
 
 ---
 
-## Matchup -- Week 5
+## Matchup -- Week 6
 
-Facing **ASTRONUTZ69**.
+Facing **certifiedtortapounda**.
 
 | | Projected | |
 |:--|--:|:--|
-| **You** | **119.3** | `███████████░` |
-| **ASTRONUTZ69** | **127.2** | `████████████` |
+| **You** | **125.2** | `████████████` |
+| **certifiedtortapounda** | **90.8** | `█████████░░░` |
 
-You're projected to **lose by 8.0**.
+You're projected to **win by 34.4**.
 
-**ASTRONUTZ69's currently-set starters**
+**certifiedtortapounda's currently-set starters**
 
 | Player | Proj |
 |:--|--:|
-| Matthew Stafford (QB, LAR) | 18.7 |
-| Jonathan Taylor (RB, IND) | 19.2 |
-| Jaylen Warren (RB, PIT) | 19.8 |
-| Justin Jefferson (WR, MIN) | 16.3 |
-| Jaylen Waddle (WR, DEN) | 12.1 |
-| Harold Fannin (TE, CLE) | 10.9 |
-| Aaron Jones (RB, MIN) | 14.9 |
-| Cam Little (K, JAX) | 6.5 |
-| Cincinnati Bengals (DEF, CIN) | 8.9 |
+| Josh Allen (QB, BUF) | 24.9 |
+| Derrick Henry (RB, BAL) | 16.4 |
+| Quinshon Judkins (RB, CLE) | 8.5 |
+| Tee Higgins (WR, CIN) | 0.0 |
+| Garrett Wilson (WR, NYJ) | 15.1 |
+| Sam LaPorta (TE, DET) | 0.0 |
+| Michael Wilson (WR, ARI) | 13.8 |
+| Cameron Dicker (K, LAC) | 5.7 |
+| Houston Texans (DEF, HOU) | 6.3 |
 
 ---
 
@@ -82,11 +70,25 @@ You're projected to **lose by 8.0**.
 
 ### Upgrades for this week
 
+**DEF**
+
+| Player | Adds | Bid | Notes |
+|:--|--:|:--|:--|
+| Kansas City Chiefs `KC` | **+3.8** | **$8-$20** |  |
+| Indianapolis Colts `IND` | **+3.5** | **$8-$20** | trending in 308,796 leagues |
+| New England Patriots `NE` | **+3.5** | **$8-$20** | trending in 738,682 leagues |
+
+**QB**
+
+| Player | Adds | Bid | Notes |
+|:--|--:|:--|:--|
+| Jordan Love `GB` | **+5.1** | **$20-$35** | trending in 75,534 leagues |
+
 **WR**
 
 | Player | Adds | Bid | Notes |
 |:--|--:|:--|:--|
-| Malik Washington `MIA` | **+1.0** | **$2-$8** | trending in 144,880 leagues |
+| Wan'Dale Robinson `TEN` | **+1.3** | **$2-$8** | trending in 28,086 leagues |
 
 ### Speculative adds
 
@@ -94,8 +96,11 @@ These wouldn't crack your lineup today, but the rest of the market is buying -- 
 
 | Player | Pos | Being added in |
 |:--|:--|--:|
-| Roschon Johnson `CHI` | RB | 533,728 leagues |
-| Darius Cooper `PHI` | WR | 274,414 leagues |
-| Kendrick Bourne `ARI` | WR | 231,552 leagues |
-| Tyler Higbee `LAR` | TE | 208,872 leagues |
-| MarShawn Lloyd `GB` | RB | 155,043 leagues |
+| Dameon Pierce `PHI` | RB | 1,710,336 leagues |
+| MarShawn Lloyd `GB` | RB | 1,381,689 leagues |
+| Darius Cooper `PHI` | WR | 599,382 leagues |
+| Tyler Higbee `LAR` | TE | 407,907 leagues |
+| Kimani Vidal `LAC` | RB | 377,925 leagues |
+
+> [!IMPORTANT]
+> **Budget pace:** you've only spent 0% of your FAAB budget with the season 36% through -- unspent budget at season end is pure waste.
