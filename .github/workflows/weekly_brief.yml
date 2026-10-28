@@ -2,11 +2,14 @@ name: Weekly Brief
 
 on:
   schedule:
-    # 13:00 UTC ~= 8-9am ET depending on DST -- close enough for a morning
-    # brief that a human reads later; not worth a second cron entry to chase
-    # the DST shift exactly. Sunday (before lineup lock) and Tuesday (after
-    # waiver processing) per PRD 3.4/6.3.
-    - cron: "0 13 * * 0,2"
+    # Thursday, Saturday and Tuesday mornings: Thursday before the TNF lock,
+    # Saturday for the Sunday lineup, Tuesday for the week's waiver bids.
+    # The time is deliberately the middle of the night (06:23 UTC = 2:23am
+    # EDT / 1:23am EST). GitHub starts scheduled runs late under load -- the
+    # old 13:00 UTC Sunday run actually fired 3-6.5h late, landing right at
+    # 1pm kickoff -- so aim early enough that even a bad delay arrives by
+    # breakfast. Off the top of the hour because :00 is the most congested.
+    - cron: "23 6 * * 2,4,6"
   workflow_dispatch: {}
 
 permissions:

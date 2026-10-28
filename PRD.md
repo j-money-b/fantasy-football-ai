@@ -95,7 +95,7 @@ A `CLAUDE.md` at repo root describing the league, the user's roster, and how to 
 **GitHub Actions.** Private repo, scheduled workflow. Removes the user's laptop from the critical path entirely — the user does not keep it powered on.
 
 - **Private, not public** (revised from an earlier draft of this doc). Private repos get 2,000 free Actions minutes/month, comfortably enough for two runs a week — no reason to expose league/roster data and config just to run a scheduled job.
-- Runs Tuesday and Sunday mornings (~13:00 UTC ≈ 8–9am ET depending on DST — a single cron entry, not worth chasing the exact DST offset): Tuesday for post-waiver-processing planning context, Sunday for a final lineup-lock check.
+- Runs Thursday, Saturday and Tuesday mornings (cron 06:23 UTC, a single entry): Thursday before the Thursday-night lineup lock, Saturday to set the Sunday lineup, Tuesday to plan the week's FAAB bids. *Changed 2026-10-27 from Sunday + Tuesday at 13:00 UTC.* GitHub was starting scheduled runs 3–6.5h late, so the Sunday brief landed around 12:10–12:50 ET, at kickoff and too late to act on. The middle-of-the-night time leaves room for that delay.
 - Known caveat: scheduled Actions can be delayed under load (minutes to occasionally longer). Acceptable for a morning brief.
 - Workflow writes the brief back to the repo (`.github/workflows/weekly_brief.yml`, `brief.md`).
 - Rejected: local cron (fails silently when the machine is asleep — this is the exact failure pattern the user has been burned by before).
@@ -387,7 +387,7 @@ Sequenced against a hard draft deadline of 2–4 weeks out.
 - Weekly brief (`ffai/brief.py`, `ffai/cli.py brief --out`) — R6 heartbeat line, R1 staleness banner (states actual data age per stale source, not a placeholder), recommended lineup with changes-vs-currently-set-lineup callouts, injury/depth-chart flags, opponent's currently-set starters for context, `NO PROJECTIONS AVAILABLE` labeling when degraded (R2)
 - Start/sit (`ffai/cli.py startsit`) — plain-text rendering of the same optimal-lineup engine
 - `refresh` escape hatch (`ffai/cli.py refresh`, R7) — forces a live re-pull of the player dictionary regardless of its normal once-daily cache window, prints the plain-text start/sit summary. Waivers don't exist until Phase 3, so this is the closest present equivalent to "save the bad Tuesday"; its output will extend to include a waiver summary once Phase 3 ships.
-- GitHub Actions scheduling (`.github/workflows/weekly_brief.yml`) — Tuesday + Sunday mornings, `workflow_dispatch` for manual runs, commits `brief.md` back to the (private) repo with the default `GITHUB_TOKEN`, no new secrets needed
+- GitHub Actions scheduling (`.github/workflows/weekly_brief.yml`) — Thursday + Saturday + Tuesday mornings (originally Tuesday + Sunday; see 6.3), `workflow_dispatch` for manual runs, commits `brief.md` back to the (private) repo with the default `GITHUB_TOKEN`, no new secrets needed
 - ESPN projections fallback fixed to refuse weekly fetches rather than silently return season totals (see §4.2)
 - 147 tests passing (`python -m pytest -q`)
 - Code pushed to GitHub (commit `2ebd397`); the workflow was manually triggered once via `gh workflow run` (`workflow_dispatch`) and confirmed working end-to-end — checkout, install, generate, and commit-back all succeeded, producing a real `brief.md` commit.
