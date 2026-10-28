@@ -1,7 +1,9 @@
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
+from ffai.availability import apply_availability
 from ffai.byes import load_bye_weeks
 from ffai.config import PLAYER_DICT_MAX_AGE_HOURS, SLEEPER_USERNAME
 from ffai.player_pool import build_projection, is_draftable
@@ -21,6 +23,8 @@ from ffai.roster import find_display_name, find_my_roster, find_opponent_roster
 from ffai.sleeper_client import SleeperAPIError
 
 logger = logging.getLogger(__name__)
+
+EASTERN = ZoneInfo("America/New_York")
 
 
 def _stale_note(label, fetched_at):
@@ -58,6 +62,21 @@ class WeeklyContext:
     projections: "object | None" = None  # the raw ProjectionsResult -- waivers.py needs this to score free agents
     trending_counts: dict = field(default_factory=dict)  # player_id -> recent add count across Sleeper; supplementary waiver signal
     byes_by_team: dict = field(default_factory=dict)  # team -> bye week, so callers don't re-read the bye table
+    # week -> ProjectionsResult for the weeks after this one, so add/drop
+    # decisions can see byes and schedules coming instead of judging a player
+    # on one week. Missing weeks just shorten the horizon (never load-bearing).
+    future_projections: dict = field(default_factory=dict)
+    # Players whose game this week is already over (Thursday night, seen from
+    # a Saturday brief). They can't be moved into or out of a lineup, and
+    # adding one off the wire buys nothing until next week.
+    already_played: set = field(default_factory=set)
+
+
+# This week plus the next three: long enough that a bye or a one-week injury
+# doesn't decide who to cut, short enough that projections still mean
+# something. Capped at the last fantasy week -- nothing after it matters.
+HORIZON_WEEKS = 4
+LAST_FANTASY_WEEK = 17
 
 
 def gather_weekly_context(
@@ -68,6 +87,7 @@ def gather_weekly_context(
     username=SLEEPER_USERNAME,
     adapter=None,
     player_dict_max_age_hours=PLAYER_DICT_MAX_AGE_HOURS,
+    today=None,
 ):
     """Composition root for brief/startsit/refresh: gathers everything those
     commands need in one place so they can't drift out of sync. Every fetch
@@ -132,6 +152,20 @@ def gather_weekly_context(
 
     byes_by_team = load_bye_weeks()
 
+    # Game dates are calendar days, so compare in the timezone the NFL
+    # schedules in -- a UTC date flips to "tomorrow" during Thursday night's game.
+    today = today or datetime.now(EASTERN).date().isoformat()
+    already_played = {pid for pid, game_date in projections.game_dates.items() if game_date < today}
+
+    future_projections = {}
+    if week is not None and not projections.degraded:
+        for future_week in range(week + 1, min(week + HORIZON_WEEKS, LAST_FANTASY_WEEK + 1)):
+            future, future_stale, _ = fetch_projections(
+                adapter, cache, players_raw, season, week=future_week, known_player_ids=known_player_ids
+            )
+            if not future.degraded and not future_stale:
+                future_projections[future_week] = future
+
     # Supplementary signal only (PRD 6.3), never load-bearing -- a failure
     # here must not cost us the rest of the brief.
     trending_counts = {}
@@ -142,12 +176,18 @@ def gather_weekly_context(
         logger.info("trending adds unavailable: %s", exc)
 
     my_roster = find_my_roster(rosters, user.get("user_id"))
-    my_players = _roster_projections(my_roster, players_raw, projections, scoring_settings, byes_by_team)
+    # Availability applied here, once, so nothing downstream can rank a
+    # ruled-out player on a projection Sleeper never zeroed.
+    my_players = apply_availability(
+        _roster_projections(my_roster, players_raw, projections, scoring_settings, byes_by_team), players_raw, week
+    )
 
     opponent_roster = None
     if my_roster is not None:
         opponent_roster = find_opponent_roster(matchups, my_roster["roster_id"], rosters)
-    opponent_players = _roster_projections(opponent_roster, players_raw, projections, scoring_settings, byes_by_team)
+    opponent_players = apply_availability(
+        _roster_projections(opponent_roster, players_raw, projections, scoring_settings, byes_by_team), players_raw, week
+    )
     opponent_display_name = (
         find_display_name(users, opponent_roster.get("owner_id")) if opponent_roster is not None else None
     )
@@ -169,6 +209,8 @@ def gather_weekly_context(
         projections=projections,
         trending_counts=trending_counts,
         byes_by_team=byes_by_team,
+        future_projections=future_projections,
+        already_played=already_played,
     )
 
 

@@ -51,7 +51,7 @@ def test_render_brief_omits_banner_when_no_warnings():
 def test_render_brief_shows_optimal_lineup_and_bench():
     text = render_brief_markdown(_base_context())
 
-    assert "**Projected total: 35.0 pts**" in text
+    assert "**Best lineup: 35.0 pts**" in text
     assert "| **QB** | QB-1" in text
     assert "| **RB** | RB-2" in text
 
@@ -94,9 +94,7 @@ def test_render_brief_shows_lineup_changes_vs_current_starters():
 
     text = render_brief_markdown(context)
 
-    assert "Changes vs. your currently-set lineup" in text
-    assert "| **Start** | QB-1 (QB) -- 20.0 pts |" in text
-    assert "| **Sit** | QB-2 (QB) -- 5.0 pts |" in text
+    assert "**Start QB-1** (QB), **bench QB-2** -- QB-1 projects 20.0 vs. 5.0 for QB-2." in text
 
 
 def test_render_brief_opponent_section_no_matchup():
@@ -118,87 +116,116 @@ def test_render_brief_opponent_section_shows_their_starters():
     assert "WR-3" in text
 
 
-# --- action items ----------------------------------------------------------
-# Regression cover for the Week 3 2026 brief, which rendered a ruled-out QB
-# projected 0.0 in the starting lineup and drew no conclusion from it.
+# --- the Week 8 2026 failure ----------------------------------------------
+# Sleeper never zeroes a ruled-out player's projection, so the old brief told
+# the user to "hold" two Out starters and never suggested a bench swap or a
+# pickup. These cover the replacement behaviour end to end through the
+# renderer.
 
-def _waiver_plan(targets=(), bids=None, faab=True, remaining=100, pace=None, priority=None, degraded=False):
-    from ffai.waivers import WaiverPlan
+def _out(player_id, position, points, status="Out", body_part="Concussion"):
+    from ffai.availability import apply_availability
 
-    targets = list(targets)
-    return WaiverPlan(
-        targets=targets, ranked=targets, bids=bids or {}, label="FAAB Bidding", faab=faab,
-        remaining_budget=remaining, pace_warning=pace, priority_note=priority, degraded=degraded,
-    )
-
-
-def _target(player, marginal_value=10.0, trending=None):
-    from ffai.models import WaiverTarget
-
-    return WaiverTarget(player=player, marginal_value=marginal_value, trending_count=trending, reasons=[])
+    raw = {player_id: {"injury_status": status, "injury_body_part": body_part}}
+    return apply_availability([_player(player_id, position, points)], raw, week=1)[0], raw
 
 
-def test_brief_calls_out_a_ruled_out_starter_as_an_action_item():
+def test_brief_benches_a_ruled_out_starter_for_a_healthy_bench_player():
+    out, raw = _out("1", "WR", 11.7)
     context = _base_context(
-        roster_positions=["QB"],
-        my_players=[_player("1", "QB", 0.0)],
+        roster_positions=["WR", "BN"],
+        my_players=[out, _player("2", "WR", 10.3)],
         my_roster={"roster_id": 1, "starters": ["1"]},
-        players_raw={"1": {"injury_status": "Out"}},
+        players_raw=raw,
     )
 
     text = render_brief_markdown(context)
 
-    assert "Action Required" in text
-    assert "lineup hole" in text
-    assert "**Out**" in text
+    assert "**Start WR-2** instead of WR-1 -- WR-1 is Out (Concussion) and won't score" in text
+    assert "Hold" not in text
 
 
-def test_brief_names_the_replacement_and_the_bid():
-    context = _base_context(
-        roster_positions=["QB"],
-        my_players=[_player("1", "QB", 0.0)],
-        my_roster={"roster_id": 1, "starters": ["1"]},
-        players_raw={"1": {"injury_status": "Out"}},
-    )
-    plan = _waiver_plan(targets=[_target(_player("99", "QB", 17.6), marginal_value=17.6)], bids={"99": (20, 35)})
+def _move_plan(moves=(), wire=None, rising=(), weeks=(1, 2, 3, 4)):
+    from ffai.roster_moves import MovePlan
 
-    text = render_brief_markdown(context, waiver_plan=plan)
-
-    assert "QB-99" in text
-    assert "**$20-$35**" in text
-    assert "**+17.6 pts**" in text
+    return MovePlan(weeks=list(weeks), moves=list(moves), wire=wire or {}, rising=list(rising))
 
 
-def test_brief_says_hold_when_nothing_on_the_wire_is_an_upgrade():
-    context = _base_context(
-        roster_positions=["QB"],
-        my_players=[_player("1", "QB", 2.0)],
-        my_roster={"roster_id": 1, "starters": ["1"]},
+def _waiver_plan(moves=None, faab=True, remaining=100, pace=None):
+    from ffai.waivers import WaiverPlan
+
+    return WaiverPlan(
+        targets=[], ranked=[], bids={}, label="FAAB Bidding", faab=faab,
+        remaining_budget=remaining, pace_warning=pace, priority_note=None, degraded=False,
+        moves=moves if moves is not None else _move_plan(),
     )
 
-    text = render_brief_markdown(context, waiver_plan=_waiver_plan(targets=[_target(_player("99", "QB", 2.2))]))
 
-    assert "Hold." in text
+def _roster_move(add, drop, bid=(6, 12), worth=20):
+    from ffai.roster_moves import RosterMove
 
-
-def test_brief_reports_a_clean_lineup_when_there_are_no_holes():
-    text = render_brief_markdown(_base_context())
-
-    assert "No lineup holes." in text
-    assert "Action Required" not in text
-
-
-def test_brief_renders_waiver_targets_grouped_by_position():
-    plan = _waiver_plan(
-        targets=[_target(_player("99", "QB", 17.6), 17.6), _target(_player("98", "RB", 11.0), 4.0)],
-        bids={"99": (20, 35)},
+    return RosterMove(
+        add=add, drop=drop, gain=14.9, gain_this_week=1.4, weeks=[1, 2, 3, 4],
+        add_by_week=[11.7, 11.1, 12.1, 12.5], drop_by_week=[0.0, 0.0, 0.0, 0.0],
+        trending_count=None, bid=bid, worth=worth, market="little competition",
+        reasons=["Cut QB-9: he wouldn't start a single week of the next 4."],
     )
+
+
+def test_brief_names_the_pickup_the_drop_the_bid_and_why():
+    move = _roster_move(_player("99", "WR", 11.7), _player("9", "QB", 13.9))
+    plan = _waiver_plan(_move_plan([move]))
+
+    text = render_brief_markdown(_base_context(), waiver_plan=plan, now=_tuesday())
+
+    assert "**Add WR-99, drop QB-9** -- bid $6-$12 before Wednesday ~3am ET." in text
+    assert "### 1. Add WR-99 (WR, KC) -- drop QB-9 (QB)" in text
+    assert "**+14.9 pts** over weeks 1-4" in text
+    assert "Cut QB-9: he wouldn't start a single week" in text
+
+
+def test_brief_says_add_now_once_waivers_have_run():
+    move = _roster_move(_player("99", "WR", 11.7), _player("9", "QB", 13.9))
+    plan = _waiver_plan(_move_plan([move]))
+
+    text = render_brief_markdown(_base_context(), waiver_plan=plan, now=_saturday())
+
+    assert "add now as a free agent (if he's on waivers, bid $6-$12)" in text
+
+
+def test_brief_always_shows_the_wire_even_with_nothing_to_do():
+    from ffai.roster_moves import WireEntry
+
+    entry = WireEntry(player=_player("98", "RB", 9.0), horizon_points=31.9, gain=0.0, best_drop=None, trending_count=54220)
+    plan = _waiver_plan(_move_plan(wire={"RB": [entry]}))
 
     text = render_brief_markdown(_base_context(), waiver_plan=plan)
 
-    assert "## Waiver Wire" in text
-    assert "**Budget remaining: $100**" in text
-    assert "**QB**" in text and "**RB**" in text
+    assert "No add/drop is worth making right now" in text
+    assert "## On the wire right now" in text
+    assert "| RB | RB-98 `KC` | 31.9 | +0.0 | -- | 54,220 |" in text
+    assert "**FAAB budget left: $100**" in text
+
+
+def test_brief_reports_nothing_to_do_when_lineup_is_set_and_wire_is_empty():
+    context = _base_context(my_roster={"roster_id": 1, "starters": ["1", "2"]})
+
+    text = render_brief_markdown(context, waiver_plan=_waiver_plan())
+
+    assert "**Nothing to do this week.**" in text
+
+
+def _tuesday():
+    from datetime import datetime
+    from ffai.brief_model import EASTERN
+
+    return datetime(2026, 10, 27, 8, 0, tzinfo=EASTERN)
+
+
+def _saturday():
+    from datetime import datetime
+    from ffai.brief_model import EASTERN
+
+    return datetime(2026, 10, 31, 8, 0, tzinfo=EASTERN)
 
 
 def test_brief_shows_projected_margin_against_the_opponent():
@@ -220,5 +247,5 @@ def test_brief_omits_action_section_when_projections_are_degraded():
 
     text = render_brief_markdown(context)
 
-    assert "Action Required" not in text
+    assert "Do this" not in text
     assert "NO PROJECTIONS AVAILABLE" in text

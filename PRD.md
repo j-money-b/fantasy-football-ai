@@ -216,12 +216,48 @@ a hole (those players usually play) and a +0.1-pt kicker is not a
 recommendation. A brief that cries wolf stops being read, which fails the
 same way silence does.
 
+**Superseded 2026-10-27, after the Week 8 brief failed in use.** Sleeper's
+weekly projections ignore injury status entirely (Egbuka, Out with a
+concussion, still projected 11.7), so the optimizer started two Out players
+over healthy bench options and the hole logic told the user to "hold" them.
+The waiver section also only looked when there was a hole, never said who to
+cut, and priced bids off relative tiers (a kicker at $19-$33). The user's
+direction: check the wire every time whether or not anything is wrong, and
+always say who to add, who to drop, why, and what to bid. What replaced it:
+
+- **Availability is applied before anything ranks a player**
+  (`ffai/availability.py`). Out/Doubtful/IR/PUP/Suspended/NA, on bye, or (for
+  free agents) game already played = 0 pts this week, for the roster, the
+  opponent, and the wire alike. IR/PUP/Suspended/NA are also 0 for the whole
+  add/drop window; plain Out keeps future weeks, since nothing knows a return
+  date. The lineup then simply benches the Out player, and the brief says
+  "start X instead of Y -- Y is Out (Concussion)".
+- **Add/drop over a 4-week horizon** (`ffai/roster_moves.py`). The roster is
+  full, so every add is also a cut. Each candidate is scored by how much the
+  team's optimal lineup improves, summed over this week and the next three,
+  against the best player to cut for him. This sees byes and backups who never
+  start. Up to 3 moves, best first, each assuming the earlier ones; a move must
+  clear +4 pts over the window. K/DEF only swap for K/DEF.
+- **Bids tie value to budget and market.** A move's worth = horizon gain x
+  (budget left / weeks left / ~5 pts per typical weekly pickup), capped at
+  half the budget; the actual bid is a share of that worth set by how many
+  Sleeper leagues are adding him (little/some/heavy competition). K/DEF are
+  always $1.
+- **Waiver timing by day.** This league's claims process Wednesday ~3am ET
+  (observed from its transactions). The Tuesday brief says "bid $X before
+  Wednesday"; Thursday/Saturday say "add now as a free agent".
+- **The wire scan is unconditional**: the top 3 at every position with their
+  4-week points and gain, plus who the rest of Sleeper is adding.
+- **Games already played are locked** (Sleeper projection rows carry the game
+  date): a Saturday brief won't move a Thursday-night player in or out, or
+  recommend adding one for this week.
+
 ### 6.3 Waivers + FAAB
 
 **The league's waiver system is not yet known** — the commissioner sets it. Read from league settings; support both:
 
 **If FAAB (most likely):** blind auction, fixed season budget (typically $100), no replenishment, processes overnight Tue→Wed, highest bid wins, ties usually break by roster order.
-- Output: ranked targets with recommended **bid ranges** and reasoning
+- Output: ranked targets with recommended **bid ranges** and reasoning -- now add/drop pairs with a horizon gain and a value-and-market-based bid; see the 2026-10-27 note in 6.2a
 - Track remaining budget and pace — flag both over-conservatism (unspent budget at season end is pure waste) and early overspending
 
 **If rolling priority:** queue-based, worst record on top, claim drops you to the back.

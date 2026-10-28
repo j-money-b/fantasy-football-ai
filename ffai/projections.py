@@ -79,6 +79,10 @@ class ProjectionsResult:
     source: str  # "sleeper" | "espn" | "none"
     degraded: bool
     warnings: list = field(default_factory=list)
+    # player_id -> "YYYY-MM-DD" of his game that week (Sleeper weekly rows
+    # carry it; ESPN and season fetches don't). Lets a Saturday brief know a
+    # Thursday-night player has already played.
+    game_dates: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -109,6 +113,7 @@ class ProjectionsAdapter:
         self.fantasypros_host = fantasypros_host
         self.timeout = timeout
         self.retry_backoff_seconds = retry_backoff_seconds
+        self.last_game_dates = {}
 
     def fetch(self, players_raw, season, week=None, positions=DEFAULT_POSITIONS, known_player_ids=None):
         """Sleeper -> ESPN -> degraded. `players_raw` is the full Sleeper
@@ -125,7 +130,9 @@ class ProjectionsAdapter:
             ok, val_warnings = self._validate(raw, known_player_ids)
             warnings.extend(val_warnings)
             if ok:
-                return ProjectionsResult(raw, source="sleeper", degraded=False, warnings=warnings)
+                return ProjectionsResult(
+                    raw, source="sleeper", degraded=False, warnings=warnings, game_dates=self.last_game_dates
+                )
             warnings.append("Sleeper projections failed validation, falling back to ESPN")
 
         try:
@@ -206,6 +213,9 @@ class ProjectionsAdapter:
         if not isinstance(data, list):
             raise ProjectionsFetchError(f"unexpected response shape: {type(data)}")
 
+        # Kept beside the stats rather than inside them, so the return shape
+        # every caller and test relies on stays a plain stats dict.
+        self.last_game_dates = {row["player_id"]: row["date"] for row in data if row.get("player_id") and row.get("date")}
         return {row["player_id"]: row.get("stats", {}) for row in data if row.get("player_id")}
 
     def _fetch_espn(self, players_raw, season, week, positions):

@@ -2,10 +2,12 @@ import statistics
 from collections import Counter
 from dataclasses import dataclass
 
+from ffai.availability import apply_availability
 from ffai.lineup import optimize_lineup
 from ffai.models import WaiverTarget
 from ffai.player_pool import build_projection, is_draftable
 from ffai.projections import DEFAULT_POSITIONS
+from ffai.roster_moves import future_points, plan_moves
 from ffai.vorp import DEDICATED_POSITIONS
 
 # Sleeper's official API docs do not enumerate waiver_type's values. This
@@ -288,6 +290,7 @@ class WaiverPlan:
     pace_warning: "str | None"
     priority_note: "str | None"
     degraded: bool
+    moves: "MovePlan | None" = None  # add/drop recommendations + the always-on wire scan (roster_moves.py)
 
 
 # Bids are tiered across a wider pool than we display: the gap-clustering in
@@ -308,8 +311,13 @@ def build_waiver_plan(context, byes_by_team=None, per_position=DISPLAY_PER_POSIT
     scoring_settings = context.league.get("scoring_settings", {})
     roster_settings = context.my_roster.get("settings", {}) or {}
 
-    free_agents = compute_free_agents(
-        context.players_raw, context.rosters, context.projections, scoring_settings, byes_by_team
+    # Same availability rule as the roster: a ruled-out free agent is worth
+    # nothing this week, and neither is one whose game already happened.
+    free_agents = apply_availability(
+        compute_free_agents(context.players_raw, context.rosters, context.projections, scoring_settings, byes_by_team),
+        context.players_raw,
+        context.week,
+        already_played=context.already_played,
     )
     # Ranked ONCE. Each ranked player costs a full lineup re-optimization, so
     # ranking the pool a second time to get the position-capped view made the
@@ -344,7 +352,21 @@ def build_waiver_plan(context, byes_by_team=None, per_position=DISPLAY_PER_POSIT
             ranked[0] if ranked else None, waiver_position=roster_settings.get("waiver_position")
         )
 
+    moves = None
+    if not context.projections_degraded:
+        moves = plan_moves(
+            context.my_players,
+            free_agents,
+            context.roster_positions,
+            context.week,
+            future_points(context.future_projections, scoring_settings),
+            context.players_raw,
+            trending_counts=context.trending_counts,
+            remaining_budget=remaining if faab else None,
+        )
+
     return WaiverPlan(
+        moves=moves,
         targets=targets,
         ranked=ranked,
         bids=bids,

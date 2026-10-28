@@ -10,6 +10,11 @@ class PlayerProjection:
     bye_week: int | None
     points: float
     data_source: str  # "sleeper" | "espn" | "none"
+    # Set by availability.apply_availability when the player won't play this
+    # week ("Out (Concussion)", "on bye"); points is then 0 and the original
+    # projection moves to healthy_points.
+    unavailable: "str | None" = None
+    healthy_points: "float | None" = None
 
 
 @dataclass

@@ -142,3 +142,41 @@ def test_gather_weekly_context_no_roster_for_user_yields_empty_players(tmp_path)
 
     assert context.my_roster is None
     assert context.my_players == []
+
+
+class DatedProjectionsAdapter(FakeProjectionsAdapter):
+    """Player 1 played Thursday; everyone else plays Sunday."""
+
+    def fetch(self, players_raw, season, week=None, positions=None, known_player_ids=None):
+        result = super().fetch(players_raw, season, week, positions, known_player_ids)
+        result.game_dates = {"1": "2026-10-29", "2": "2026-11-01", "3": "2026-11-01"}
+        return result
+
+
+def test_gather_weekly_context_marks_games_already_played(tmp_path):
+    context = gather_weekly_context(
+        FakeClient(), Cache(db_path=tmp_path / "c.sqlite3"), "L1",
+        adapter=DatedProjectionsAdapter(), today="2026-10-31",
+    )
+
+    assert context.already_played == {"1"}
+
+
+def test_gather_weekly_context_zeroes_ruled_out_players(tmp_path):
+    client = FakeClient()
+    players = {**PLAYERS_DATA, "2": {**PLAYERS_DATA["2"], "injury_status": "Out"}}
+    client.get_players = lambda: players
+
+    context = gather_weekly_context(client, Cache(db_path=tmp_path / "c.sqlite3"), "L1", adapter=FakeProjectionsAdapter())
+
+    rb = next(p for p in context.my_players if p.player_id == "2")
+    assert rb.points == 0.0
+    assert rb.unavailable == "Out"
+
+
+def test_gather_weekly_context_fetches_the_next_weeks_for_add_drop(tmp_path):
+    context = gather_weekly_context(
+        FakeClient(), Cache(db_path=tmp_path / "c.sqlite3"), "L1", adapter=FakeProjectionsAdapter()
+    )
+
+    assert sorted(context.future_projections) == [2, 3, 4]

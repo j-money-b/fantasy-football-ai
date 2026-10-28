@@ -32,6 +32,7 @@ from ffai.roster import find_display_name, find_my_roster, find_roster_by_displa
 from ffai.sleeper_client import SleeperClient
 from ffai.trade import evaluate_trade, format_trade_evaluation, resolve_player_ids
 from ffai.vorp import build_tiers, compute_replacement_levels, compute_vorp
+from ffai.roster_moves import format_move_plan
 from ffai.waivers import build_waiver_plan, format_waiver_report
 from ffai.weekly_context import gather_weekly_context
 
@@ -321,11 +322,17 @@ def _format_waivers_text(context):
         lines.append("NO PROJECTIONS AVAILABLE -- waiver targets ranked by roster need and trending-add velocity only.")
         lines.append("")
 
-    lines.append(format_waiver_report(
-        plan.targets, plan.label, plan.faab,
-        remaining_budget=plan.remaining_budget, faab_bids=plan.bids,
-        pace_warning=plan.pace_warning, priority_note=plan.priority_note,
-    ))
+    if plan.moves is not None:
+        lines.append(f"Waivers ({plan.label}):")
+        lines.append(format_move_plan(plan.moves, plan.remaining_budget if plan.faab else None))
+        if plan.pace_warning:
+            lines.append(f"BUDGET: {plan.pace_warning}")
+    else:
+        lines.append(format_waiver_report(
+            plan.targets, plan.label, plan.faab,
+            remaining_budget=plan.remaining_budget, faab_bids=plan.bids,
+            pace_warning=plan.pace_warning, priority_note=plan.priority_note,
+        ))
 
     if context.warnings:
         lines.append("")

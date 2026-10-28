@@ -95,7 +95,11 @@ def fetch_projections(
     result = adapter.fetch(players_raw, season, week=week, positions=positions, known_player_ids=known_player_ids)
 
     if not result.degraded:
-        fetched_at = cache.set(key, {"raw_stats_by_player": result.raw_stats_by_player, "source": result.source})
+        fetched_at = cache.set(key, {
+            "raw_stats_by_player": result.raw_stats_by_player,
+            "source": result.source,
+            "game_dates": result.game_dates,
+        })
         return result, False, fetched_at
 
     cached = cache.get(key)
@@ -108,6 +112,7 @@ def fetch_projections(
         source=payload["source"],
         degraded=False,
         warnings=result.warnings + [f"live projections fetch degraded; serving cached data from {fetched_at}"],
+        game_dates=payload.get("game_dates", {}),
     )
     return stale_result, True, fetched_at
 
