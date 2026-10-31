@@ -1,45 +1,40 @@
 # Week 8 Brief
 
-`Last successful run: 2026-10-29 13:20 UTC`
+`Last successful run: 2026-10-31 12:48 UTC`
 
-> [!IMPORTANT]
-> **Do this:**
->
-> 1. **Start Emeka Egbuka** instead of Chris Godwin Jr. -- Emeka Egbuka projects 11.5 vs. 10.2 for Chris Godwin Jr..
-> 2. **Add DJ Moore, drop Bo Nix** -- add now as a free agent (if he's on waivers, bid $5-$11).
->
-> *Waivers already ran this week, so unclaimed players are free agents: tap Add in Sleeper, no bid needed, first come first served. (If Sleeper shows a waiver clock on him instead, he was just dropped -- bid the amount shown.)*
+> [!NOTE]
+> **Nothing to do this week.** Your best lineup is set and nothing on the wire beats your roster.
 
 ---
 
 ## Set your lineup
 
-**Changes to make in Sleeper**
+Your lineup in Sleeper is already the best one you can set.
 
-- **Start Emeka Egbuka** (WR), **bench Chris Godwin Jr.** -- Emeka Egbuka projects 11.5 vs. 10.2 for Chris Godwin Jr..
+*Already played this week and locked in place: Chuba Hubbard.*
 
-**Best lineup: 128.8 pts**
+**Best lineup: 131.5 pts**
 
 | Slot | Player | Proj | |
 |:--|:--|--:|:--|
-| **QB** | Jayden Daniels `WAS` | **18.1** | `██████████░░` |
-| **RB** | Ashton Jeanty `LV` | **16.6** | `█████████░░░` |
-| **RB** | Chuba Hubbard `CAR` | **16.7** | `██████████░░` |
-| **WR** | Emeka Egbuka `TB` **[Questionable (Concussion)]** | **11.5** | `███████░░░░░` |
+| **QB** | Jayden Daniels `WAS` | **18.5** | `██████████░░` |
+| **RB** | Ashton Jeanty `LV` | **15.8** | `█████████░░░` |
+| **RB** | Bijan Robinson `ATL` | **21.9** | `████████████` |
+| **WR** | DJ Moore `BUF` **[Questionable (Shoulder - AC Joint)]** | **14.0** | `████████░░░░` |
 | **WR** | Drake London `ATL` | **16.5** | `█████████░░░` |
-| **TE** | Tyler Warren `IND` **[Questionable (Groin)]** | **11.0** | `██████░░░░░░` |
-| **FLEX** | Bijan Robinson `ATL` | **21.0** | `████████████` |
-| **K** | Evan McPherson `CIN` | **7.8** | `████░░░░░░░░` |
-| **DEF** | Cincinnati Bengals `CIN` | **9.8** | `██████░░░░░░` |
+| **TE** | Tyler Warren `IND` | **10.8** | `██████░░░░░░` |
+| **FLEX** | Chuba Hubbard `CAR` | **16.7** | `█████████░░░` |
+| **K** | Evan McPherson `CIN` | **7.9** | `████░░░░░░░░` |
+| **DEF** | Cincinnati Bengals `CIN` | **9.4** | `█████░░░░░░░` |
 
 **Bench**
 
 | Player | Proj | |
 |:--|--:|:--|
-| Bo Nix `DEN` | 14.1 | `████████░░░░` |
-| Breece Hall `NYJ` **[Questionable (Quadriceps)]** | 11.2 | `██████░░░░░░` |
-| Chris Godwin Jr. `TB` `depth: SWR2` | 10.2 | `██████░░░░░░` |
-| Hunter Henry `NE` | 9.4 | `█████░░░░░░░` |
+| Chris Godwin Jr. `TB` | 11.5 | `██████░░░░░░` |
+| Breece Hall `NYJ` **[Questionable (Quadriceps)]** | 11.4 | `██████░░░░░░` |
+| Hunter Henry `NE` | 10.7 | `██████░░░░░░` |
+| Emeka Egbuka `TB` **[Out (Foot)]** `depth: LWR7` | 0.0 | `░░░░░░░░░░░░` |
 | Ka'imi Fairbairn `HOU` **[on bye]** | 0.0 | `░░░░░░░░░░░░` |
 
 ---
@@ -48,21 +43,7 @@
 
 **FAAB budget left: $69** -- FAAB is your season's waiver money; each week the highest blind bid on a player wins him.
 
-### 1. Add DJ Moore (WR, BUF) -- drop Bo Nix (QB)
-
-| | |
-|:--|:--|
-| Do it | add now as a free agent (if he's on waivers, bid $5-$11) |
-| Most he's worth to you | $32 |
-| Market | little competition |
-| Gain | **+23.2 pts** over weeks 8-11 (+3.2 this week) |
-| Points by week | wk8 14.7, wk9 12.9, wk10 14.3, wk11 15.9 vs. Bo Nix: wk8 14.1, wk9 15.2, wk10 0.0, wk11 18.1 |
-
-**Why:**
-- Improves this week's lineup by 3.2 pts.
-- DJ Moore projects 57.7 pts over weeks 8-11 (wk8 14.7, wk9 12.9, wk10 14.3, wk11 15.9).
-- Cut Bo Nix: he wouldn't start a single week of the next 4 -- you only start one QB, and the other one is better.
-
+No add/drop is worth making right now: nobody on the wire would improve your lineup by more than a point a week over weeks 8-11. The full scan is below.
 
 ---
 
@@ -72,34 +53,34 @@ The best available at each position, over weeks 8-11. **Gain** is what he'd add 
 
 | Pos | Player | Pts (4 wk) | Gain | Would replace | Adds today |
 |:--|:--|--:|--:|:--|--:|
-| QB | Sam Darnold `SEA` | 52.8 | **+3.6** | Bo Nix | 23,607 |
-| QB | Malik Willis `MIA` | 62.5 | **+2.4** | Bo Nix | 66,129 |
-| QB | Baker Mayfield `TB` | 51.4 | **+1.3** | Bo Nix | -- |
-| RB | Rachaad White `WAS` | 41.3 | +0.0 | -- | 83,520 |
+| QB | Sam Darnold `SEA` | 52.6 | **+1.9** | Hunter Henry | -- |
+| QB | Bryce Young `CAR` **[already played this week]** | 54.4 | +0.5 | Hunter Henry | -- |
+| QB | Kyler Murray `MIN` | 65.2 | +0.3 | Hunter Henry | 26,120 |
+| RB | Rachaad White `WAS` | 41.7 | +0.0 | -- | 19,935 |
 | RB | David Montgomery `HOU` **[Out (Groin)]** | 34.1 | +0.0 | -- | -- |
-| RB | Zach Charbonnet `SEA` | 30.0 | +0.0 | -- | 31,524 |
-| WR | DJ Moore `BUF` | 57.7 | **+23.2** | Bo Nix | -- |
-| WR | Stefon Diggs `WAS` | 47.5 | **+13.9** | Bo Nix | -- |
-| WR | Wan'Dale Robinson `TEN` | 34.4 | **+12.2** | Bo Nix | -- |
-| TE | Mark Andrews `BAL` | 36.8 | +0.0 | -- | 39,600 |
-| TE | Jake Ferguson `DAL` | 36.0 | +0.0 | -- | 47,315 |
-| TE | Kenyon Sadiq `NYJ` | 33.4 | +0.0 | -- | 49,302 |
-| K | Drew Stevens `WAS` | 27.6 | +0.0 | -- | 27,760 |
-| K | Cam Little `JAX` | 25.9 | +0.0 | -- | -- |
-| K | Tyler Bass `BUF` | 25.7 | +0.0 | -- | 187,605 |
-| DEF | Kansas City Chiefs `KC` | 29.0 | **+1.4** | Cincinnati Bengals | -- |
-| DEF | Buffalo Bills `BUF` | 26.3 | -1.3 | -- | -- |
-| DEF | Baltimore Ravens `BAL` | 26.3 | -1.3 | -- | -- |
+| RB | Zach Charbonnet `SEA` | 29.5 | +0.0 | -- | 9,372 |
+| WR | Keenan Allen `IND` | 39.7 | +0.0 | -- | 18,536 |
+| WR | Malik Washington `MIA` | 39.5 | +0.0 | -- | 19,784 |
+| WR | Khalil Shakir `BUF` | 36.0 | +0.0 | -- | 50,688 |
+| TE | Mark Andrews `BAL` | 36.6 | +0.0 | -- | 17,739 |
+| TE | Jake Ferguson `DAL` | 35.9 | +0.0 | -- | 14,590 |
+| TE | Mike Gesicki `CIN` | 33.0 | +0.0 | -- | 12,844 |
+| K | Drew Stevens `WAS` | 27.4 | +0.0 | -- | -- |
+| K | Harrison Butker `KC` | 26.0 | +0.0 | -- | -- |
+| K | Tyler Bass `BUF` | 26.0 | +0.0 | -- | 32,580 |
+| DEF | Buffalo Bills `BUF` | 26.2 | -2.1 | -- | -- |
+| DEF | Baltimore Ravens `BAL` | 25.8 | -2.5 | -- | -- |
+| DEF | Dallas Cowboys `DAL` | 25.0 | -3.3 | -- | -- |
 
 **Who everyone else is adding** -- usually a role change or an injury ahead of him on the depth chart:
 
 | Pos | Player | Pts (4 wk) | Gain | Adds today |
 |:--|:--|--:|--:|--:|
-| RB | Elijah Mitchell `PHI` | 3.2 | +0.0 | 724,941 |
-| RB | Devin Singletary `NYG` **[on bye]** | 16.7 | +0.0 | 391,194 |
-| WR | Caleb Douglas `MIA` | 29.4 | **+7.5** | 383,568 |
-| DEF | Tampa Bay Buccaneers `TB` | 18.3 | -9.2 | 301,460 |
-| RB | Jaydon Blue `PHI` | 2.5 | +0.0 | 299,312 |
+| RB | Elijah Mitchell `PHI` | 4.3 | +0.0 | 169,677 |
+| RB | Devin Singletary `NYG` **[on bye]** | 22.7 | +0.0 | 133,326 |
+| WR | Ryan Flournoy `DAL` | 32.3 | +0.0 | 129,152 |
+| RB | Jaydon Blue `PHI` | 6.9 | +0.0 | 106,504 |
+| WR | Makai Lemon `PHI` | 19.9 | +0.0 | 105,796 |
 
 ---
 
@@ -109,21 +90,21 @@ Facing **armanddo619**.
 
 | | Projected | |
 |:--|--:|:--|
-| **You** (best lineup) | **128.8** | `████████████` |
-| **armanddo619** (as set) | **114.2** | `███████████░` |
+| **You** (best lineup) | **131.5** | `████████████` |
+| **armanddo619** (as set) | **119.0** | `███████████░` |
 
-You're projected to **win by 14.7**.
+You're projected to **win by 12.6**.
 
 **armanddo619's currently-set starters**
 
 | Player | Proj |
 |:--|--:|
-| Caleb Williams (QB, CHI) | 15.8 |
-| Kyle Monangai (RB, CHI) **[Questionable (Toe)]** | 6.1 |
-| Jeremiyah Love (RB, ARI) **[Questionable (Ankle)]** | 9.5 |
-| CeeDee Lamb (WR, DAL) | 22.4 |
+| Caleb Williams (QB, CHI) | 15.6 |
+| Jonah Coleman (RB, DEN) | 11.6 |
+| Jeremiyah Love (RB, ARI) | 10.4 |
+| CeeDee Lamb (WR, DAL) | 21.9 |
 | Jalen Coker (WR, CAR) | 15.9 |
-| Trey McBride (TE, ARI) | 19.3 |
-| Jameson Williams (WR, DET) | 10.1 |
-| Tyler Loop (K, BAL) | 6.5 |
+| Trey McBride (TE, ARI) | 18.6 |
+| Jameson Williams (WR, DET) | 9.8 |
+| Tyler Loop (K, BAL) | 6.6 |
 | Los Angeles Rams (DEF, LAR) | 8.5 |
