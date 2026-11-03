@@ -1,6 +1,6 @@
-# Week 8 Brief
+# Week 9 Brief
 
-`Last successful run: 2026-10-31 12:48 UTC`
+`Last successful run: 2026-11-03 14:29 UTC`
 
 > [!NOTE]
 > **Nothing to do this week.** Your best lineup is set and nothing on the wire beats your roster.
@@ -11,31 +11,29 @@
 
 Your lineup in Sleeper is already the best one you can set.
 
-*Already played this week and locked in place: Chuba Hubbard.*
-
-**Best lineup: 131.5 pts**
+**Best lineup: 129.1 pts**
 
 | Slot | Player | Proj | |
 |:--|:--|--:|:--|
-| **QB** | Jayden Daniels `WAS` | **18.5** | `██████████░░` |
-| **RB** | Ashton Jeanty `LV` | **15.8** | `█████████░░░` |
-| **RB** | Bijan Robinson `ATL` | **21.9** | `████████████` |
-| **WR** | DJ Moore `BUF` **[Questionable (Shoulder - AC Joint)]** | **14.0** | `████████░░░░` |
-| **WR** | Drake London `ATL` | **16.5** | `█████████░░░` |
-| **TE** | Tyler Warren `IND` | **10.8** | `██████░░░░░░` |
-| **FLEX** | Chuba Hubbard `CAR` | **16.7** | `█████████░░░` |
-| **K** | Evan McPherson `CIN` | **7.9** | `████░░░░░░░░` |
-| **DEF** | Cincinnati Bengals `CIN` | **9.4** | `█████░░░░░░░` |
+| **QB** | Jayden Daniels `WAS` | **17.0** | `████████░░░░` |
+| **RB** | Ashton Jeanty `LV` | **12.1** | `██████░░░░░░` |
+| **RB** | Chuba Hubbard `CAR` | **16.8** | `████████░░░░` |
+| **WR** | DJ Moore `BUF` **[Questionable (Undisclosed)]** | **12.6** | `██████░░░░░░` |
+| **WR** | Drake London `ATL` **[Questionable (Head)]** | **17.8** | `█████████░░░` |
+| **TE** | Tyler Warren `IND` | **12.8** | `██████░░░░░░` |
+| **FLEX** | Bijan Robinson `ATL` | **25.1** | `████████████` |
+| **K** | Evan McPherson `CIN` | **8.2** | `████░░░░░░░░` |
+| **DEF** | Cincinnati Bengals `CIN` | **6.8** | `███░░░░░░░░░` |
 
 **Bench**
 
 | Player | Proj | |
 |:--|--:|:--|
-| Chris Godwin Jr. `TB` | 11.5 | `██████░░░░░░` |
-| Breece Hall `NYJ` **[Questionable (Quadriceps)]** | 11.4 | `██████░░░░░░` |
-| Hunter Henry `NE` | 10.7 | `██████░░░░░░` |
-| Emeka Egbuka `TB` **[Out (Foot)]** `depth: LWR7` | 0.0 | `░░░░░░░░░░░░` |
-| Ka'imi Fairbairn `HOU` **[on bye]** | 0.0 | `░░░░░░░░░░░░` |
+| Chris Godwin Jr. `TB` `depth: SWR2` | 9.1 | `████░░░░░░░░` |
+| Ka'imi Fairbairn `HOU` | 7.1 | `███░░░░░░░░░` |
+| Emeka Egbuka `TB` **[Out (Foot)]** | 0.0 | `░░░░░░░░░░░░` |
+| Hunter Henry `NE` **[Out (Foot)]** | 0.0 | `░░░░░░░░░░░░` |
+| Breece Hall `NYJ` **[Out (Quadriceps)]** | 0.0 | `░░░░░░░░░░░░` |
 
 ---
 
@@ -43,68 +41,68 @@ Your lineup in Sleeper is already the best one you can set.
 
 **FAAB budget left: $69** -- FAAB is your season's waiver money; each week the highest blind bid on a player wins him.
 
-No add/drop is worth making right now: nobody on the wire would improve your lineup by more than a point a week over weeks 8-11. The full scan is below.
+No add/drop is worth making right now: nobody on the wire would improve your lineup by more than a point a week over weeks 9-12. The full scan is below.
 
 ---
 
 ## On the wire right now
 
-The best available at each position, over weeks 8-11. **Gain** is what he'd add to your team after cutting your least useful player for him -- zero or less means he wouldn't help you.
+The best available at each position, over weeks 9-12. **Gain** is what he'd add to your team after cutting your least useful player for him -- zero or less means he wouldn't help you.
 
 | Pos | Player | Pts (4 wk) | Gain | Would replace | Adds today |
 |:--|:--|--:|--:|:--|--:|
-| QB | Sam Darnold `SEA` | 52.6 | **+1.9** | Hunter Henry | -- |
-| QB | Bryce Young `CAR` **[already played this week]** | 54.4 | +0.5 | Hunter Henry | -- |
-| QB | Kyler Murray `MIN` | 65.2 | +0.3 | Hunter Henry | 26,120 |
-| RB | Rachaad White `WAS` | 41.7 | +0.0 | -- | 19,935 |
-| RB | David Montgomery `HOU` **[Out (Groin)]** | 34.1 | +0.0 | -- | -- |
-| RB | Zach Charbonnet `SEA` | 29.5 | +0.0 | -- | 9,372 |
-| WR | Keenan Allen `IND` | 39.7 | +0.0 | -- | 18,536 |
-| WR | Malik Washington `MIA` | 39.5 | +0.0 | -- | 19,784 |
-| WR | Khalil Shakir `BUF` | 36.0 | +0.0 | -- | 50,688 |
-| TE | Mark Andrews `BAL` | 36.6 | +0.0 | -- | 17,739 |
-| TE | Jake Ferguson `DAL` | 35.9 | +0.0 | -- | 14,590 |
-| TE | Mike Gesicki `CIN` | 33.0 | +0.0 | -- | 12,844 |
-| K | Drew Stevens `WAS` | 27.4 | +0.0 | -- | -- |
-| K | Harrison Butker `KC` | 26.0 | +0.0 | -- | -- |
-| K | Tyler Bass `BUF` | 26.0 | +0.0 | -- | 32,580 |
-| DEF | Buffalo Bills `BUF` | 26.2 | -2.1 | -- | -- |
-| DEF | Baltimore Ravens `BAL` | 25.8 | -2.5 | -- | -- |
-| DEF | Dallas Cowboys `DAL` | 25.0 | -3.3 | -- | -- |
+| QB | Sam Darnold `SEA` | 50.8 | **+1.9** | Hunter Henry | 50,406 |
+| QB | Bryce Young `CAR` | 73.7 | +0.6 | Hunter Henry | -- |
+| QB | Malik Willis `MIA` | 63.6 | +0.5 | Hunter Henry | 113,393 |
+| RB | David Montgomery `HOU` **[Out (Groin)]** | 33.4 | +0.9 | Hunter Henry | 28,962 |
+| RB | Tyler Allgeier `ARI` | 31.6 | +0.0 | -- | 565,180 |
+| RB | Zach Charbonnet `SEA` | 30.6 | +0.0 | -- | 17,175 |
+| WR | Malik Washington `MIA` | 40.3 | +0.0 | -- | 120,256 |
+| WR | Keenan Allen `IND` | 39.5 | +0.0 | -- | 37,152 |
+| WR | Khalil Shakir `BUF` | 34.9 | +0.0 | -- | 31,887 |
+| TE | Juwan Johnson `NO` | 44.7 | +0.3 | Hunter Henry | 15,678 |
+| TE | Mike Gesicki `CIN` | 33.6 | +0.0 | -- | 132,836 |
+| TE | Dalton Schultz `HOU` | 33.5 | +0.0 | -- | -- |
+| K | Spencer Shrader `IND` | 31.7 | **+2.5** | Ka'imi Fairbairn | -- |
+| K | Eddy Pineiro `SF` | 27.1 | +0.0 | -- | 15,669 |
+| K | Drew Stevens `WAS` | 26.8 | +0.0 | -- | -- |
+| DEF | Baltimore Ravens `BAL` | 28.1 | **+3.5** | Cincinnati Bengals | -- |
+| DEF | New York Giants `NYG` | 27.2 | **+2.7** | Cincinnati Bengals | 64,352 |
+| DEF | San Francisco 49ers `SF` | 27.0 | **+2.5** | Cincinnati Bengals | 84,777 |
 
 **Who everyone else is adding** -- usually a role change or an injury ahead of him on the depth chart:
 
 | Pos | Player | Pts (4 wk) | Gain | Adds today |
 |:--|:--|--:|--:|--:|
-| RB | Elijah Mitchell `PHI` | 4.3 | +0.0 | 169,677 |
-| RB | Devin Singletary `NYG` **[on bye]** | 22.7 | +0.0 | 133,326 |
-| WR | Ryan Flournoy `DAL` | 32.3 | +0.0 | 129,152 |
-| RB | Jaydon Blue `PHI` | 6.9 | +0.0 | 106,504 |
-| WR | Makai Lemon `PHI` | 19.9 | +0.0 | 105,796 |
+| WR | Adonai Mitchell `NYJ` | 27.7 | +0.0 | 893,056 |
+| QB | Gardner Minshew II `ARI` | 48.8 | +0.0 | 615,588 |
+| RB | Tyler Allgeier `ARI` | 31.6 | +0.0 | 565,180 |
+| RB | Emmett Johnson `KC` | 18.3 | +0.0 | 391,356 |
+| RB | Devin Singletary `NYG` | 30.3 | +0.0 | 308,799 |
 
 ---
 
-## Matchup -- Week 8
+## Matchup -- Week 9
 
-Facing **armanddo619**.
+Facing **MeetMeByTheBean**.
 
 | | Projected | |
 |:--|--:|:--|
-| **You** (best lineup) | **131.5** | `████████████` |
-| **armanddo619** (as set) | **119.0** | `███████████░` |
+| **You** (best lineup) | **129.1** | `████████████` |
+| **MeetMeByTheBean** (as set) | **100.6** | `█████████░░░` |
 
-You're projected to **win by 12.6**.
+You're projected to **win by 28.5**.
 
-**armanddo619's currently-set starters**
+**MeetMeByTheBean's currently-set starters**
 
 | Player | Proj |
 |:--|--:|
-| Caleb Williams (QB, CHI) | 15.6 |
-| Jonah Coleman (RB, DEN) | 11.6 |
-| Jeremiyah Love (RB, ARI) | 10.4 |
-| CeeDee Lamb (WR, DAL) | 21.9 |
-| Jalen Coker (WR, CAR) | 15.9 |
-| Trey McBride (TE, ARI) | 18.6 |
-| Jameson Williams (WR, DET) | 9.8 |
-| Tyler Loop (K, BAL) | 6.6 |
-| Los Angeles Rams (DEF, LAR) | 8.5 |
+| Lamar Jackson (QB, BAL) **[Out (Thumb)]** | 0.0 |
+| Bhayshul Tuten (RB, JAX) **[Questionable (Ankle)]** | 12.6 |
+| James Cook III (RB, BUF) **[Questionable (Undisclosed)]** | 15.1 |
+| Jaxon Smith-Njigba (WR, SEA) | 25.4 |
+| Luther Burden III (WR, CHI) | 18.1 |
+| Pat Freiermuth (TE, PIT) **[on bye]** | 0.0 |
+| Matthew Golden (WR, GB) | 13.7 |
+| Matt Gay (K, LV) | 7.2 |
+| Denver Broncos (DEF, DEN) | 8.5 |
