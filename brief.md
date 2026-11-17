@@ -1,14 +1,16 @@
-# Week 10 Brief
+# Week 11 Brief
 
-`Last successful run: 2026-11-14 13:40 UTC`
+`Last successful run: 2026-11-17 16:15 UTC`
 
 > [!IMPORTANT]
 > **Do this:**
 >
-> 1. **Start Evan McPherson** instead of Ka'imi Fairbairn -- Evan McPherson projects 7.4 vs. 6.8 for Ka'imi Fairbairn.
-> 2. **Add Stefon Diggs, drop Emeka Egbuka** -- add now as a free agent (if he's on waivers, bid $1-$3).
+> 1. **Start Breece Hall** instead of Bijan Robinson -- Bijan Robinson is on bye and won't score -- Breece Hall projects 12.1.
+> 2. **Start Emeka Egbuka** instead of Drake London -- Drake London is on bye and won't score -- Emeka Egbuka projects 10.3.
+> 3. **Add Stefon Diggs, drop Emeka Egbuka** -- bid $2-$4 before Wednesday ~3am ET.
+> 4. **Add Denver Broncos, drop Cincinnati Bengals** -- bid $1 before Wednesday ~3am ET.
 >
-> *Waivers already ran this week, so unclaimed players are free agents: tap Add in Sleeper, no bid needed, first come first served. (If Sleeper shows a waiver clock on him instead, he was just dropped -- bid the amount shown.)*
+> *Waivers run Wednesday ~3am ET. Place these as FAAB bids in Sleeper before then -- highest bid wins, and you only pay if you win.*
 
 ---
 
@@ -16,35 +18,32 @@
 
 **Changes to make in Sleeper**
 
-- **Start Evan McPherson** (K), **bench Ka'imi Fairbairn** -- Evan McPherson projects 7.4 vs. 6.8 for Ka'imi Fairbairn.
+- **Start Breece Hall** (RB), **bench Bijan Robinson** -- Bijan Robinson is on bye and won't score -- Breece Hall projects 12.1.
+- **Start Emeka Egbuka** (WR), **bench Drake London** -- Drake London is on bye and won't score -- Emeka Egbuka projects 10.3.
 
-*Worth only +0.6 pts -- inside projection noise. Make it if you're already in the app, skip it if you're not.*
-
-*Already played this week and locked in place: Jayden Daniels.*
-
-**Best lineup: 124.0 pts**
+**Best lineup: 109.7 pts**
 
 | Slot | Player | Proj | |
 |:--|:--|--:|:--|
-| **QB** | Jayden Daniels `WAS` | **18.8** | `███████████░` |
-| **RB** | Ashton Jeanty `LV` | **11.9** | `███████░░░░░` |
-| **RB** | Chuba Hubbard `CAR` | **17.9** | `███████████░` |
-| **WR** | DJ Moore `BUF` | **12.2** | `███████░░░░░` |
-| **WR** | Drake London `ATL` | **16.7** | `██████████░░` |
-| **TE** | Tyler Warren `IND` | **12.6** | `████████░░░░` |
-| **FLEX** | Bijan Robinson `ATL` | **20.1** | `████████████` |
-| **K** | Evan McPherson `CIN` | **7.4** | `████░░░░░░░░` |
-| **DEF** | Cincinnati Bengals `CIN` | **6.3** | `████░░░░░░░░` |
+| **QB** | Jayden Daniels `WAS` | **21.1** | `████████████` |
+| **RB** | Ashton Jeanty `LV` | **12.1** | `███████░░░░░` |
+| **RB** | Breece Hall `NYJ` | **12.1** | `███████░░░░░` |
+| **WR** | Emeka Egbuka `TB` | **10.3** | `██████░░░░░░` |
+| **WR** | DJ Moore `BUF` | **13.1** | `███████░░░░░` |
+| **TE** | Tyler Warren `IND` | **10.8** | `██████░░░░░░` |
+| **FLEX** | Chuba Hubbard `CAR` | **15.8** | `█████████░░░` |
+| **K** | Ka'imi Fairbairn `HOU` | **7.9** | `████░░░░░░░░` |
+| **DEF** | Cincinnati Bengals `CIN` | **6.5** | `████░░░░░░░░` |
 
 **Bench**
 
 | Player | Proj | |
 |:--|--:|:--|
-| Breece Hall `NYJ` | 11.9 | `███████░░░░░` |
-| Hunter Henry `NE` | 10.0 | `██████░░░░░░` |
-| Ka'imi Fairbairn `HOU` | 6.8 | `████░░░░░░░░` |
-| CJ Daniels `LAR` `depth: LWR3` | 4.9 | `███░░░░░░░░░` |
-| Emeka Egbuka `TB` **[on bye]** | 0.0 | `░░░░░░░░░░░░` |
+| Evan McPherson `CIN` | 7.5 | `████░░░░░░░░` |
+| CJ Daniels `LAR` **[on bye]** `depth: LWR3` | 0.0 | `░░░░░░░░░░░░` |
+| Hunter Henry `NE` **[on bye]** | 0.0 | `░░░░░░░░░░░░` |
+| Drake London `ATL` **[on bye]** | 0.0 | `░░░░░░░░░░░░` |
+| Bijan Robinson `ATL` **[on bye]** | 0.0 | `░░░░░░░░░░░░` |
 
 ---
 
@@ -56,78 +55,97 @@
 
 | | |
 |:--|:--|
-| Do it | add now as a free agent (if he's on waivers, bid $1-$3) |
-| Most he's worth to you | $8 |
+| Do it | bid $2-$4 before Wednesday ~3am ET |
+| Most he's worth to you | $12 |
 | Market | little competition |
-| Gain | **+4.8 pts** over weeks 10-13 (+0.0 this week) |
-| Points by week | wk10 0.0, wk11 13.1, wk12 13.3, wk13 13.1 vs. Emeka Egbuka: wk10 0.0, wk11 11.4, wk12 9.8, wk13 11.1 |
+| Gain | **+6.0 pts** over weeks 11-14 (+2.8 this week) |
+| Points by week | wk11 13.1, wk12 13.6, wk13 13.3, wk14 12.3 vs. Emeka Egbuka: wk11 10.3, wk12 9.8, wk13 11.1, wk14 10.5 |
 
 **Why:**
-- Stefon Diggs is already played this week this week -- this is a pickup for the weeks after.
-- Stefon Diggs projects 39.5 pts over weeks 10-13 (wk10 0.0, wk11 13.1, wk12 13.3, wk13 13.1).
-- Cut Emeka Egbuka: he'd start 2 of the next 4 weeks, but the new player scores more over that stretch (zero in week 10).
+- Improves this week's lineup by 2.8 pts.
+- Stefon Diggs projects 52.2 pts over weeks 11-14 (wk11 13.1, wk12 13.6, wk13 13.3, wk14 12.3).
+- Cut Emeka Egbuka: he'd start 2 of the next 4 weeks, but the new player scores more over that stretch.
 
+### 2. Add Denver Broncos (DEF, DEN) -- drop Cincinnati Bengals (DEF)
+
+| | |
+|:--|:--|
+| Do it | bid $1 before Wednesday ~3am ET |
+| Market | always another one available next week -- never pay real money (34,414 adds in the last day) |
+| Gain | **+4.8 pts** over weeks 11-14 (+2.2 this week) |
+| Points by week | wk11 8.7, wk12 6.9, wk13 8.1, wk14 7.1 vs. Cincinnati Bengals: wk11 6.5, wk12 6.9, wk13 7.1, wk14 5.6 |
+
+**Why:**
+- Improves this week's lineup by 2.2 pts.
+- Denver Broncos projects 30.8 pts over weeks 11-14 (wk11 8.7, wk12 6.9, wk13 8.1, wk14 7.1).
+- Added in 34,414 Sleeper leagues in the last day -- a popular streaming pick for the matchups ahead.
+- Cut Cincinnati Bengals: he'd start 4 of the next 4 weeks, but the new player scores more over that stretch.
+
+*Each move assumes you made the ones above it.*
+
+> [!TIP]
+> **Budget pace:** you've only spent 31% of your FAAB budget with the season 71% through -- unspent budget at season end is pure waste.
 
 ---
 
 ## On the wire right now
 
-The best available at each position, over weeks 10-13. **Gain** is what he'd add to your team after cutting your least useful player for him -- zero or less means he wouldn't help you.
+The best available at each position, over weeks 11-14. **Gain** is what he'd add to your team after cutting your least useful player for him -- zero or less means he wouldn't help you.
 
 | Pos | Player | Pts (4 wk) | Gain | Would replace | Adds today |
 |:--|:--|--:|--:|:--|--:|
-| QB | Justin Herbert `LAC` | 58.0 | +0.0 | -- | -- |
-| QB | Cam Ward `TEN` | 57.4 | +0.0 | -- | -- |
-| QB | Bo Nix `DEN` **[on bye]** | 53.2 | +0.0 | -- | -- |
-| RB | Jordan Mason `MIN` | 42.5 | **+1.4** | CJ Daniels | 24,835 |
-| RB | Quinshon Judkins `CLE` | 33.6 | +0.8 | CJ Daniels | -- |
-| RB | David Montgomery `HOU` | 41.0 | +0.1 | CJ Daniels | 10,998 |
-| WR | Stefon Diggs `WAS` **[already played this week]** | 39.5 | **+4.8** | Emeka Egbuka | -- |
-| WR | KC Concepcion Jr. `CLE` | 32.6 | +0.1 | CJ Daniels | 27,747 |
-| WR | Wan'Dale Robinson `TEN` | 42.4 | +0.0 | -- | 9,583 |
-| TE | Chig Okonkwo `WAS` **[already played this week]** | 31.0 | **+1.3** | CJ Daniels | -- |
-| TE | Mike Gesicki `CIN` | 39.4 | +0.4 | CJ Daniels | 48,068 |
-| TE | Juwan Johnson `NO` | 36.2 | +0.0 | CJ Daniels | -- |
-| K | Eddy Pineiro `SF` | 26.1 | +0.0 | -- | -- |
-| K | Ryan Fitzgerald `CAR` | 25.4 | +0.0 | -- | 12,265 |
-| K | Harrison Butker `KC` | 24.6 | +0.0 | -- | -- |
-| DEF | Buffalo Bills `BUF` | 28.2 | **+1.7** | Cincinnati Bengals | 13,035 |
-| DEF | San Francisco 49ers `SF` | 26.4 | -0.1 | -- | 8,475 |
-| DEF | Los Angeles Chargers `LAC` | 24.1 | -2.4 | -- | -- |
+| QB | Bo Nix `DEN` | 71.0 | +0.0 | -- | 169,848 |
+| QB | Baker Mayfield `TB` | 62.5 | +0.0 | -- | -- |
+| QB | Justin Herbert `LAC` | 61.6 | +0.0 | -- | -- |
+| RB | Quinshon Judkins `CLE` **[on bye]** | 35.5 | +1.0 | CJ Daniels | -- |
+| RB | Jordan Mason `MIN` | 41.4 | +0.3 | CJ Daniels | 19,220 |
+| RB | Rico Dowdle `PIT` | 32.3 | +0.0 | -- | -- |
+| WR | Stefon Diggs `WAS` | 52.2 | **+6.0** | Emeka Egbuka | -- |
+| WR | Ryan Flournoy `DAL` | 27.7 | +0.3 | CJ Daniels | 405,488 |
+| WR | Wan'Dale Robinson `TEN` | 40.3 | +0.0 | -- | -- |
+| TE | T.J. Hockenson `MIN` **[Out (Wrist)]** | 33.0 | **+1.9** | CJ Daniels | -- |
+| TE | Chig Okonkwo `WAS` | 40.7 | **+1.5** | CJ Daniels | -- |
+| TE | Juwan Johnson `NO` | 36.0 | +0.2 | CJ Daniels | -- |
+| K | Dominic Zvada `NYG` | 28.7 | +1.0 | Evan McPherson | -- |
+| K | Drew Stevens `WAS` | 28.2 | +0.5 | Evan McPherson | -- |
+| K | Cairo Santos `CHI` | 25.0 | -0.3 | -- | 130,452 |
+| DEF | Denver Broncos `DEN` | 30.8 | **+4.8** | Cincinnati Bengals | 34,414 |
+| DEF | Chicago Bears `CHI` | 27.6 | **+1.6** | Cincinnati Bengals | 61,359 |
+| DEF | Tampa Bay Buccaneers `TB` | 27.1 | **+1.1** | Cincinnati Bengals | 110,190 |
 
 **Who everyone else is adding** -- usually a role change or an injury ahead of him on the depth chart:
 
 | Pos | Player | Pts (4 wk) | Gain | Adds today |
 |:--|:--|--:|--:|--:|
-| TE | Darren Waller `CAR` | 34.5 | +0.0 | 291,645 |
-| WR | Chimere Dike `TEN` | 24.4 | +0.0 | 215,388 |
-| WR | Tutu Atwell `LAR` | 15.8 | +0.0 | 125,629 |
-| WR | Konata Mumpfield `LAR` | 17.1 | +0.0 | 122,742 |
-| RB | Justice Hill `BAL` | 21.2 | +0.0 | 90,531 |
+| TE | Michael Mayer `LV` | 24.2 | +0.0 | 779,958 |
+| WR | Xavier Hutchinson `HOU` | 22.4 | +0.0 | 692,167 |
+| RB | Seth McGowan `IND` | 19.9 | +0.0 | 448,168 |
+| WR | Ryan Flournoy `DAL` | 27.7 | +0.3 | 405,488 |
+| TE | Mark Andrews `BAL` | 19.9 | +0.0 | 385,929 |
 
 ---
 
-## Matchup -- Week 10
+## Matchup -- Week 11
 
-Facing **zmonsterr**.
+Facing **juniorarauz22**.
 
 | | Projected | |
 |:--|--:|:--|
-| **You** (best lineup) | **124.0** | `████████████` |
-| **zmonsterr** (as set) | **113.6** | `███████████░` |
+| **You** (best lineup) | **109.7** | `████████████` |
+| **juniorarauz22** (as set) | **110.7** | `████████████` |
 
-You're projected to **win by 10.4**.
+You're projected to **lose by 1.0**.
 
-**zmonsterr's currently-set starters**
+**juniorarauz22's currently-set starters**
 
 | Player | Proj |
 |:--|--:|
-| Drake Maye (QB, NE) | 22.8 |
-| Javonte Williams (RB, DAL) | 17.2 |
-| Kenneth Walker III (RB, KC) **[Questionable (Groin)]** | 18.2 |
-| Carnell Tate (WR, TEN) **[Out (Shoulder)]** | 0.0 |
-| A.J. Brown (WR, NE) **[Questionable (Knee)]** | 14.2 |
-| Tucker Kraft (TE, GB) | 10.7 |
-| George Kittle (TE, SF) | 15.3 |
-| Spencer Shrader (K, IND) | 8.4 |
-| Kansas City Chiefs (DEF, KC) | 6.7 |
+| Trevor Lawrence (QB, JAX) | 20.5 |
+| Jahmyr Gibbs (RB, DET) | 23.5 |
+| Omarion Hampton (RB, LAC) | 9.1 |
+| Nico Collins (WR, HOU) | 16.1 |
+| Tetairoa McMillan (WR, CAR) | 14.8 |
+| Dalton Kincaid (TE, BUF) | 10.2 |
+| DK Metcalf (WR, PIT) | 8.9 |
+| Brandon Aubrey (K, DAL) | 7.6 |
+| Seattle Seahawks (DEF, SEA) **[on bye]** | 0.0 |
